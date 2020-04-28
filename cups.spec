@@ -1,297 +1,229 @@
-%define php_extdir %(php-config --extension-dir 2>/dev/null || echo %{_libdir}/php4)
-%global php_apiver %((echo 0; php -i 2>/dev/null | sed -n 's/^PHP API => //p') | tail -1)
+%global use_alternatives 1
+%global lspp 1
 
-%define initdir /etc/rc.d/init.d
-%define use_alternatives 1
-%define lspp 1
-%define cups_serverbin %{_exec_prefix}/lib/cups
+# {_exec_prefix}/lib/cups is correct, even on x86_64.
+# It is not used for shared objects but for executables.
+# It's more of a libexec-style ({_libexecdir}) usage,
+# but we use lib for compatibility with 3rd party drivers (at upstream request).
+%global cups_serverbin %{_exec_prefix}/lib/cups
 
-Summary: Common Unix Printing System
+Summary: CUPS printing system
 Name: cups
-Version: 1.4.2
-Release: 79%{?dist}
+Epoch: 1
+Version: 1.6.3
+Release: 35%{?dist}
 License: GPLv2
 Group: System Environment/Daemons
-Source: http://ftp.easysw.com/pub/cups/%{version}/cups-%{version}-source.tar.bz2
-# Our initscript
-Source1: cups.init
+Url: http://www.cups.org/
+Source: http://www.cups.org/software/%{version}/cups-%{version}-source.tar.bz2
 # Pixmap for desktop file
 Source2: cupsprinter.png
-# udev rules for libusb devices
-Source3: cups-libusb.rules
-# LSPP-required ps->pdf filter
-Source4: pstopdf
-# xinetd config file for cups-lpd service
-Source5: cups-lpd
-# Filter for converting to CUPS raster format
-Source6: pstoraster
-Source7: pstoraster.convs
+# socket unit for cups-lpd service
+Source3: cups-lpd.socket
+# cups-lpd service unit configuration
+Source4: cups-lpd@.service
 # Logrotate configuration
-Source8: cups.logrotate
+Source6: cups.logrotate
 # Backend for NCP protocol
-Source9: ncp.backend
-# Cron-based tmpwatch for /var/spool/cups/tmp
-Source10: cups.cron
-# Filter and PPD for textonly printing
-Source11: textonly.filter
-Source12: textonly.ppd
+Source7: ncp.backend
+Source8: macros.cups
 
 Patch1: cups-no-gzip-man.patch
-Patch2: cups-1.1.16-system-auth.patch
+Patch2: cups-system-auth.patch
 Patch3: cups-multilib.patch
-Patch4: cups-serial.patch
+Patch4: cups-dbus-utf8.patch
 Patch5: cups-banners.patch
 Patch6: cups-serverbin-compat.patch
 Patch7: cups-no-export-ssllibs.patch
-Patch8: cups-str3448.patch
-Patch9: cups-direct-usb.patch
-Patch10: cups-lpr-help.patch
-Patch11: cups-peercred.patch
-Patch12: cups-pid.patch
-Patch13: cups-page-label.patch
-Patch14: cups-eggcups.patch
-Patch15: cups-getpass.patch
-Patch16: cups-driverd-timeout.patch
-Patch17: cups-strict-ppd-line-length.patch
-Patch18: cups-logrotate.patch
-Patch19: cups-usb-paperout.patch
-Patch20: cups-build.patch
-Patch21: cups-res_init.patch
-Patch22: cups-filter-debug.patch
-Patch23: cups-uri-compat.patch
-Patch24: cups-cups-get-classes.patch
-Patch25: cups-avahi.patch
-Patch26: cups-str3382.patch
-Patch27: cups-str3285_v2-str3503.patch
-Patch28: cups-str3390.patch
-Patch29: cups-str3391.patch
-Patch30: cups-str3381.patch
-Patch31: cups-str3399.patch
-Patch32: cups-str3403.patch
-Patch33: cups-str3407.patch
-Patch34: cups-str3418.patch
-Patch35: cups-CVE-2009-3553.patch
-Patch36: cups-str3422.patch
-Patch37: cups-str3413.patch
-Patch38: cups-str3439.patch
-Patch39: cups-str3440.patch
-Patch40: cups-str3442.patch
-Patch41: cups-negative-snmp-string-length.patch
-Patch42: cups-sidechannel-intrs.patch
-Patch43: cups-media-empty-warning.patch
-Patch44: cups-str3435.patch
-Patch45: cups-str3436.patch
-Patch46: cups-str3425.patch
-Patch47: cups-str3428.patch
-Patch48: cups-str3431.patch
-Patch49: cups-snmp-quirks.patch
-Patch50: cups-str3458.patch
-Patch51: cups-str3460.patch
-Patch52: cups-str3495.patch
-Patch54: cups-str3505.patch
-Patch55: cups-CVE-2010-0302.patch
-Patch56: cups-str3541.patch
-Patch57: cups-large-snmp-lengths.patch
-Patch58: cups-hp-deviceid-oid.patch
-Patch59: cups-texttops-rotate-page.patch
-Patch60: cups-cgi-vars.patch
-Patch61: cups-hostnamelookups.patch
-Patch62: cups-CVE-2010-0540.patch
-Patch63: cups-CVE-2010-0542.patch
-Patch64: cups-CVE-2010-1748.patch
-Patch65: cups-CVE-2010-2432.patch
-Patch66: cups-CVE-2010-2431.patch
-Patch67: cups-CVE-2010-2941.patch
-Patch68: cups-str3627.patch
-Patch69: cups-str3535.patch
-Patch70: cups-str3679.patch
-Patch71: cups-0755.patch
-Patch72: cups-undo-str2537.patch
-Patch73: cups-dns-failure-tolerance.patch
-Patch74: cups-snmp-conf-typo.patch
-Patch75: cups-str3832.patch
-Patch76: cups-str3861.patch
-Patch77: cups-str3809.patch
-Patch78: cups-str3867.patch
-Patch79: cups-str3795-str3880.patch
-Patch80: cups-handle-empty-files.patch
-Patch81: cups-str4015.patch
-Patch82: cups-str3449.patch
-Patch83: cups-str3635.patch
-Patch84: cups-auth-return-unauthorized.patch
-Patch85: cups-str3392.patch
-Patch86: cups-ipp-multifile.patch
-Patch87: cups-str3406-and-r8951.patch
-Patch88: cups-str3754.patch
-Patch89: cups-stringpool-setprinterattr.patch
-Patch90: cups-format_log-segfault.patch
-Patch91: cups-str3521.patch
-Patch92: cups-setenv.patch
-Patch93: cups-cupsctl-man.patch
-Patch94: cups-synconclose.patch
-Patch95: cups-settimeout.patch
-Patch96: cups-polld-reconnect.patch
-Patch97: cups-str3768.patch
-Patch98: cups-str3601.patch
-Patch99: cups-nodatadelay.patch
-Patch100: cups-str4440.patch
-Patch101: cups-cgi.patch
-Patch102: cups-send_document-crash.patch
-Patch103: cups-str3455.patch
-Patch104: cups-str3969.patch
-Patch105: cups-str4569.patch
-Patch106: cups-failover-backend.patch
-Patch107: cups-sf01321303.patch
-Patch108: cups-polld-busy-loop.patch
-Patch109: cups-str4457.patch
-Patch110: cups-str4591.patch
-Patch111: cups-str4619.patch
-Patch112: cups-str3622.patch
-Patch113: cups-str4742.patch
-Patch114: cups-job-reset-kill_time.patch
-Patch115: cups-ipp-consume-cpu.patch
-Patch116: cups-banner-notime.patch
-Patch117: cups-implicit-class.patch
-Patch118: cups-orientreq.patch
-Patch119: cups-fittopage.patch
-Patch120: cups-1.4.2-completed-at-novalue.patch
+Patch8: cups-direct-usb.patch
+Patch9: cups-lpr-help.patch
+Patch10: cups-peercred.patch
+Patch11: cups-pid.patch
+Patch12: cups-eggcups.patch
+Patch13: cups-driverd-timeout.patch
+Patch14: cups-strict-ppd-line-length.patch
+Patch15: cups-logrotate.patch
+Patch16: cups-usb-paperout.patch
+Patch17: cups-res_init.patch
+Patch18: cups-filter-debug.patch
+Patch19: cups-uri-compat.patch
+Patch20: cups-str3382.patch
+Patch21: cups-0755.patch
+Patch22: cups-hp-deviceid-oid.patch
+Patch23: cups-dnssd-deviceid.patch
+Patch24: cups-ricoh-deviceid-oid.patch
+Patch25: cups-systemd-socket.patch
+Patch26: cups-lpd-manpage.patch
+Patch27: cups-avahi-address.patch
+Patch28: cups-usblp-quirks.patch
+Patch29: cups-enum-all.patch
+Patch30: cups-stringpool-setprinterattr.patch
+Patch31: cups-dymo-deviceid.patch
+Patch32: cups-use-ipp1.1.patch
+Patch33: cups-no-gcry.patch
+Patch34: cups-avahi-no-threaded.patch
+Patch35: cups-gz-crc.patch
+Patch36: cups-ipp-multifile.patch
+Patch37: cups-full-relro.patch
+Patch38: cups-web-devices-timeout.patch
+Patch39: cups-synconclose.patch
+Patch40: cups-str4500.patch
+Patch41: cups-dbus-notifier.patch
+Patch42: cups-usb-timeout.patch
+Patch43: cups-str4326.patch
+Patch44: cups-str4327.patch
+Patch45: cups-CVE-2014-2856.patch
+Patch46: cups-str4380.patch
+Patch47: cups-colord-interface.patch
+Patch48: cups-nodatadelay.patch
+Patch49: cups-str4440.patch
+Patch50: cups-error-policy-manpage.patch
+Patch51: cups-CVE-2014-3537.patch
+Patch52: cups-CVE-2014-5029-5030-5031.patch
+Patch53: cups-str4461.patch
+Patch54: cups-str4475.patch
+Patch55: cups-failover-backend.patch
+Patch56: cups-str4609.patch
+Patch57: cups-str4551.patch
+Patch58: cups-str4476.patch
+Patch59: cups-str4591.patch
+Patch60: cups-str4646.patch
+Patch61: cups-str4648.patch
+Patch62: cups-start-service.patch
+Patch63: cups-163-enotif.patch
+Patch64: cups-163-fdleak.patch
+Patch65: cups-state-message.patch
+Patch66: cups-1.6.3-resolv_reload.patch
+Patch67: cups-1.6.3-legacy-iso88591.patch
+Patch68: cups-1.6.3-ypbind.patch
+Patch69: cups-1.6.3-overriden-h.patch
+Patch70: cups-net-backends-etimedout-enotconn.patch
+Patch71: cups-1.6.3-tlsv12.patch
+Patch72: cups-1.6.3-page-count.patch
 
-## SECURITY PATCHES:
-Patch150: cups-CVE-2012-5519.patch
-Patch151: cups-CVE-2014-2856.patch
-Patch152: cups-CVE-2014-3537.patch
-Patch153: cups-CVE-2014-5029-5030-5031.patch
-Patch154: cups-str4461.patch
-Patch155: cups-str4475.patch
-Patch156: cups-str4476.patch
-Patch157: cups-str4609.patch
-Patch158: cups-str4551.patch
+Patch100: cups-lspp.patch
 
-## Optional LSPP patch:
-Patch200: cups-lspp.patch
+Requires: %{name}-filesystem = %{epoch}:%{version}-%{release}
+Requires: %{name}-libs%{?_isa} = %{epoch}:%{version}-%{release}
+Requires: %{name}-client%{?_isa} = %{epoch}:%{version}-%{release}
 
-Epoch: 1
-Url: http://www.cups.org/
-BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
-Requires: /sbin/chkconfig /sbin/service
-Requires: %{name}-libs = %{epoch}:%{version}-%{release}
+Provides: cupsddk cupsddk-drivers
+
+BuildRequires: pam-devel pkgconfig
+BuildRequires: openssl-devel libacl-devel
+BuildRequires: openldap-devel
+BuildRequires: libusb1-devel
+BuildRequires: krb5-devel
+BuildRequires: avahi-devel
+BuildRequires: systemd, systemd-devel
+BuildRequires: dbus-devel
+BuildRequires: automake
+
+# Make sure we get postscriptdriver tags.
+BuildRequires: python-cups
+
+%if %lspp
+BuildRequires: libselinux-devel
+BuildRequires: audit-libs-devel
+%endif
+
+Requires: dbus
+
+# Requires working PrivateTmp (bug #807672)
+Requires(pre): systemd
+Requires(post): systemd
+Requires(post): systemd-sysv
+Requires(post): grep, sed
+Requires(preun): systemd
+Requires(postun): systemd
+
+# We ship udev rules which use setfacl.
+Requires: systemd
+Requires: acl
+
+# Make sure we have some filters for converting to raster format.
+Requires: ghostscript-cups
+
+%package client
+Summary: CUPS printing system - client programs
+Group: System Environment/Daemons
+License: GPLv2
+Requires: %{name}-libs%{?_isa} = %{epoch}:%{version}-%{release}
 %if %use_alternatives
 Provides: /usr/bin/lpq /usr/bin/lpr /usr/bin/lp /usr/bin/cancel /usr/bin/lprm /usr/bin/lpstat
 Requires: /usr/sbin/alternatives
 %endif
-
-# Unconditionally obsolete LPRng so that upgrades work properly.
-Obsoletes: lpd <= 3.8.15-3, lpr <= 3.8.15-3, LPRng <= 3.8.15-3
-Provides: lpd = 3.8.15-4, lpr = 3.8.15-4, LPRng = 3.8.15-4
-
-Obsoletes: cupsddk < 1.2.3-7
-Provides: cupsddk = 1.2.3-7
-Obsoletes: cupsddk-drivers < 1.2.3-7
-Provides: cupsddk-drivers = 1.2.3-7
-
-# kdelibs conflict for bug #192585.
-Conflicts: kdelibs < 6:3.5.2-6
-
-BuildRequires: pam-devel pkgconfig
-BuildRequires: gnutls-devel libacl-devel
-BuildRequires: openldap-devel
-BuildRequires: make >= 1:3.80
-BuildRequires: php-devel, pcre-devel
-BuildRequires: libjpeg-devel
-BuildRequires: libpng-devel
-BuildRequires: libtiff-devel
-BuildRequires: krb5-devel
-BuildRequires: avahi-devel
-BuildRequires: poppler-utils
-
-%if %lspp
-BuildRequires: libselinux-devel >= 1.23
-BuildRequires: audit-libs-devel >= 1.1
-%endif
-
-# -fstack-protector-all requires GCC 4.0.1
-BuildRequires: gcc >= 4.0.1
-
-BuildRequires: dbus-devel >= 0.90
-Requires: dbus >= 0.90
-
-# Requires tmpwatch for the cron.daily script (bug #218901).
-Requires: tmpwatch
-
-# We use portreserve to prevent our TCP port being stolen.
-# Require the package here so that we know /etc/portreserve/ exists.
-Requires: portreserve
-
-Requires: poppler-utils
-
-# We ship udev rules which use setfacl.
-Requires: udev
-Requires: acl
+Provides: lpr
 
 %package devel
-Summary: Common Unix Printing System - development environment
+Summary: CUPS printing system - development environment
 Group: Development/Libraries
 License: LGPLv2
-Requires: %{name}-libs = %{epoch}:%{version}-%{release}
-Requires: gnutls-devel
+Requires: %{name}-libs%{?_isa} = %{epoch}:%{version}-%{release}
+Requires: openssl-devel
 Requires: krb5-devel
 Requires: zlib-devel
-Obsoletes: cupsddk-devel < 1.2.3-7
-Provides: cupsddk-devel = 1.2.3-7
+Provides: cupsddk-devel
 
 %package libs
-Summary: Common Unix Printing System - libraries
+Summary: CUPS printing system - libraries
 Group: System Environment/Libraries
-License: LGPLv2
+License: LGPLv2 and zlib
+
+%package filesystem
+Summary: CUPS printing system - directory layout
+Group: System Environment/Base
+BuildArch: noarch
+Requires: cups-filters
 
 %package lpd
-Summary: Common Unix Printing System - lpd emulation
+Summary: CUPS printing system - lpd emulation
 Group: System Environment/Daemons
-Requires: %{name} = %{epoch}:%{version}-%{release}
-Requires: %{name}-libs = %{epoch}:%{version}-%{release}
-Requires: xinetd
+Requires: %{name}%{?_isa} = %{epoch}:%{version}-%{release}
+Requires: %{name}-libs%{?_isa} = %{epoch}:%{version}-%{release}
+Provides: lpd
 
-%package php
-Summary: Common Unix Printing System - php module
-Group: Development/Languages
-Requires: %{name} = %{epoch}:%{version}-%{release}
-Requires: %{name}-libs = %{epoch}:%{version}-%{release}
-%if 0%{?php_zend_api:1}
-Requires: php(zend-abi) = %{php_zend_api}
-Requires: php(api) = %{php_core_api}
-%else
-Requires: php-api = %{php_apiver}
-%endif
-
+%package ipptool
+Summary: CUPS printing system - tool for performing IPP requests
+Group: System Environment/Daemons
+Requires: %{name}-libs%{?_isa} = %{epoch}:%{version}-%{release}
 
 %description
-The Common UNIX Printing System provides a portable printing layer for 
-UNIX® operating systems. It has been developed by Easy Software Products 
-to promote a standard printing solution for all UNIX vendors and users. 
-CUPS provides the System V and Berkeley command-line interfaces. 
+CUPS printing system provides a portable printing layer for
+UNIX® operating systems. It has been developed by Apple Inc.
+to promote a standard printing solution for all UNIX vendors and users.
+CUPS provides the System V and Berkeley command-line interfaces.
+
+%description client
+CUPS printing system provides a portable printing layer for
+UNIX® operating systems. This package contains command-line client
+programs.
 
 %description devel
-The Common UNIX Printing System provides a portable printing layer for 
+CUPS printing system provides a portable printing layer for
 UNIX® operating systems. This is the development package for creating
 additional printer drivers, and other CUPS services.
 
 %description libs
-The Common UNIX Printing System provides a portable printing layer for 
-UNIX® operating systems. It has been developed by Easy Software Products 
-to promote a standard printing solution for all UNIX vendors and users. 
-CUPS provides the System V and Berkeley command-line interfaces. 
+CUPS printing system provides a portable printing layer for
+UNIX® operating systems. It has been developed by Apple Inc.
+to promote a standard printing solution for all UNIX vendors and users.
+CUPS provides the System V and Berkeley command-line interfaces.
 The cups-libs package provides libraries used by applications to use CUPS
 natively, without needing the lp/lpr commands.
 
+%description filesystem
+CUPS printing system provides a portable printing layer for
+UNIX® operating systems. This package provides some directories which are
+required by other packages that add CUPS drivers (i.e. filters, backends etc.).
+
 %description lpd
-The Common UNIX Printing System provides a portable printing layer for 
-UNIX® operating systems. This is the package that provides standard 
+CUPS printing system provides a portable printing layer for
+UNIX® operating systems. This is the package that provides standard
 lpd emulation.
 
-%description php
-The Common UNIX Printing System provides a portable printing layer for
-UNIX® operating systems. This is the package that provides a PHP
-module. 
+%description ipptool
+Sends IPP requests to the specified URI and tests and/or displays the results.
 
 %prep
 %setup -q
@@ -301,309 +233,167 @@ module.
 %patch2 -p1 -b .system-auth
 # Prevent multilib conflict in cups-config script.
 %patch3 -p1 -b .multilib
-# Fix compilation of serial backend.
-%patch4 -p1 -b .serial
+# Ensure attributes are valid UTF-8 in dbus notifier (bug #863387).
+%patch4 -p1 -b .dbus-utf8
 # Ignore rpm save/new files in the banners directory.
 %patch5 -p1 -b .banners
 # Use compatibility fallback path for ServerBin.
 %patch6 -p1 -b .serverbin-compat
 # Don't export SSLLIBS to cups-config.
-%patch7 -p1 -b .no-export-ssllibsd
-# Avoid use-after-free in cupsAddDest.
-%patch8 -p1 -b .str3448
+%patch7 -p1 -b .no-export-ssllibs
 # Allow file-based usb device URIs.
-%patch9 -p1 -b .direct-usb
+%patch8 -p1 -b .direct-usb
 # Add --help option to lpr.
-%patch10 -p1 -b .lpr-help
+%patch9 -p1 -b .lpr-help
 # Fix compilation of peer credentials support.
-%patch11 -p1 -b .peercred
+%patch10 -p1 -b .peercred
 # Maintain a cupsd.pid file.
-%patch12 -p1 -b .pid
-# Fix orientation of page labels.
-%patch13 -p1 -b .page-label
+%patch11 -p1 -b .pid
 # Fix implementation of com.redhat.PrinterSpooler D-Bus object.
-%patch14 -p1 -b .eggcups
-# More sophisticated implementation of cupsGetPassword than getpass.
-%patch15 -p1 -b .getpass
-# Increase driverd timeout to 70s to accommodate foomatic.
-%patch16 -p1 -b .driverd-timeout
+%patch12 -p1 -b .eggcups
+# Increase driverd timeout to 70s to accommodate foomatic (bug #744715).
+%patch13 -p1 -b .driverd-timeout
 # Only enforce maximum PPD line length when in strict mode.
-%patch17 -p1 -b .strict-ppd-line-length
+%patch14 -p1 -b .strict-ppd-line-length
 # Re-open the log if it has been logrotated under us.
-%patch18 -p1 -b .logrotate
+%patch15 -p1 -b .logrotate
 # Support for errno==ENOSPACE-based USB paper-out reporting.
-%patch19 -p1 -b .usb-paperout
-# Simplify the DNSSD parts so they can build using the compat library.
-%patch20 -p1 -b .build
-# Re-initialise the resolver on failure in httpAddrGetList().
-%patch21 -p1 -b .res_init
+%patch16 -p1 -b .usb-paperout
+# Re-initialise the resolver on failure in httpAddrGetList() (bug #567353).
+%patch17 -p1 -b .res_init
 # Log extra debugging information if no filters are available.
-%patch22 -p1 -b .filter-debug
+%patch18 -p1 -b .filter-debug
 # Allow the usb backend to understand old-style URI formats.
-%patch23 -p1 -b .uri-compat
-# Fix support for older CUPS servers in cupsGetDests.
-%patch24 -p1 -b .cups-get-classes
-# Avahi support in the dnssd backend.
-%patch25 -p1 -b .avahi
+%patch19 -p1 -b .uri-compat
 # Fix temporary filename creation.
-%patch26 -p1 -b .str3382
-# Fix cupsGetNamedDest() when a name is specified.
-%patch27 -p1 -b .str3285_v2-str3503
-# Set the PRINTER_IS_SHARED CGI variable.
-%patch28 -p1 -b .str3390
-# Set the CGI variables required by the serial backend.
-%patch29 -p1 -b .str3391
-# Fix signal handling when using gnutls.
-%patch30 -p1 -b .str3381
-# Reset SIGPIPE handler before starting child processes.
-%patch31 -p1 -b .str3399
-# Fixed typo in Russian translation of admin CGI page.
-%patch32 -p1 -b .str3403
-# Handle out-of-memory more gracefully when loading jobs.
-%patch33 -p1 -b .str3407
-# Set PPD_MAKE CGI variable.
-%patch34 -p1 -b .str3418
-# Fix use-after-free in select.c.
-%patch35 -p1 -b .CVE-2009-3553
-# Fix Russian translations of CGI pages.
-%patch36 -p1 -b .str3422
-# Fix SNMP handling.
-%patch37 -p1 -b .str3413
-# Fix adjustment of conflicting options in web interface.
-%patch38 -p1 -b .str3439
-# Show which option conflicts in web interface.
-%patch39 -p1 -b .str3440
-# Provide filter path for text/css.
-%patch40 -p1 -b .str3442
-# Fix SNMP handling with negative string lengths.
-%patch41 -p1 -b .negative-snmp-string-length
-# Fix signal handling in the sidechannel API.
-%patch42 -p1 -b .sidechannel-intrs
-# Stop network backends incorrectly clearing media-empty-warning.
-%patch43 -p1 -b .media-empty-warning
-# Fixed authentication bug in cupsPrintFiles2.
-%patch44 -p1 -b .str3435
-# Set PRINTER_NAME and PRINTER_URI_SUPPORTED CGI variables.
-%patch45 -p1 -b .str3436
-# Clean out completed jobs when PreserveJobHistory is off.
-%patch46 -p1 -b .str3425
-# Don't add two job-name attributes to each job object.
-%patch47 -p1 -b .str3428
-# Use the Get-Job-Attributes policy for a printer.
-%patch48 -p1 -b .str3431
-# Handle SNMP supply level quirks (bug #580604).
-%patch49 -p1 -b .snmp-quirks
-# Fix IPP authentication for servers requiring auth for
-# IPP-Get-Printer-Attributes.
-%patch50 -p1 -b .str3458
-# Clear printer status after successful IPP job.
-%patch51 -p1 -b .str3460
-# Avoid needless delay in socket backend.
-%patch52 -p1 -b .str3495
-# Update classes.conf when a class member printer is deleted
-# (bug #569903, STR #3505).
-%patch54 -p1 -b .str3505
-# Applied patch for CVE-2010-0302 (incomplete fix for CVE-2009-3553,
-# bug #557775).
-%patch55 -p1 -b .CVE-2010-0302
-# The lpstat command did not limit the job list to the specified printers.
-%patch56 -p1 -b .str3541
-# Fixed handling of large SNMP value lengths from upstream commit 8941.
-%patch57 -p1 -b .large-snmp-lengths
-# Add an SNMP query for HP's device ID OID (STR #3552).
-%patch58 -p1 -b .hp-deviceid-oid
-# Adjust texttops output to be in natural orientation (STR #3563).
-# This fixes page-label orientation when texttops is used in the
-# filter chain (bug #593368).
-%patch59 -p1 -b .texttops-rotate-page
-# Set PATH_INFO and AUTH_TYPE CGI variables (STR #3599, STR #3600,
-# bug #520849).
-%patch60 -p1 -b .cgi-vars
-# Use numeric addresses for interfaces unless HostNameLookups are
-# turned on (bug #590632).
-%patch61 -p1 -b .hostnamelookups
-# Applied patch for CVE-2010-0540 (web interface CSRF), including
-# cancel-RSS fix (bug #588805).
-%patch62 -p1 -b .CVE-2010-0540
-# Applied patch for CVE-2010-0542 (texttops unchecked memory
-# allocation failure leading to NULL pointer dereference, STR #3516,
-# bug #587746).
-%patch63 -p1 -b .CVE-2010-0542
-# Applied patch for CVE-2010-1748 (web interface memory disclosure,
-# STR #3577, bug #591983).
-%patch64 -p1 -b .CVE-2010-0542
-# Prevent infinite loop via HTTP_UNAUTHORIZED responses (STR #3518,
-# bug #607211, CVE-2010-2432).
-%patch65 -p1 -b .CVE-2010-2432
-# Fix latent privilege escalation vulnerability (STR #3510,
-# bug #604728, CVE-2010-2431).
-%patch66 -p1 -b .CVE-2010-2431
-# Applied patch to fix cupsd memory corruption vulnerability
-# (CVE-2010-2941, STR #3648, bug #624438).
-%patch67 -p1 -b .CVE-2010-2941
-# lpstat -p reported current job as job id zero (STR #3627, bug #614908).
-%patch68 -p1 -b .str3627
-# Set the default RIPCache to 128m (STR #3535, bug #616864).
-%patch69 -p1 -b .str3535
-# Scheduler tracks whether we are shutting down and doesn't start
-# new jobs if so (STR #3679, bug #624441).
-%patch70 -p1 -b .str3679
+%patch20 -p1 -b .str3382
 # Use mode 0755 for binaries and libraries where appropriate.
-%patch71 -p1 -b .0755
-# Revert STR #2537 so that non-UTF-8 clients continue to be accepted (bug #642448).
-%patch72 -p1 -b .undo-str2537
-# Add tolerance for DNS failures (bug #654667).
-%patch73 -p1 -b .dns-failure-tolerance
-# Typo in sample snmp.conf file (bug #672614).
-%patch74 -p1 -b .snmp-conf-typo
-# Map ASCII to ISO-8859-1 in the transcoding code (STR #3832, bug #681836).
-%patch75 -p1 -b .str3832
-# Check for empty values for some configuration directives (STR #3861, bug #706673).
-%patch76 -p1 -b .str3861
-# The network backends no longer try to collect SNMP supply and status
-# information for raw queues (STR #3809, bug #709896).
-%patch77 -p1 -b .str3809
-# The imageto* filters could crash with bad GIF files (STR #3867,
-# STR #3914, bug #714118).
-%patch78 -p1 -b .str3867
-# The scheduler might leave old job data files in the spool directory
-# (STR #3795, STR #3880, bug #735505).
-%patch79 -p1 -b .str3795-str3880
-# Don't create zero-length request files (bug #740093).
-%patch80 -p1 -b .handle-empty-files
-# The lp and lpr commands did not cancel jobs queued from stdin on an error
-# (STR #4015, bug #738914).
-%patch81 -p1 -b .str4015
-# cupsPrintFiles() did not report all errors (STR #3449, bug #740093)
-%patch82 -p1 -b .str3449
-# Fix German translation of web interface search template (STR #3635,
-# bug #806818).
-%patch83 -p1 -b .str3635
-# Avoid "forbidden" error when moving job between queues via web UI
-# (bug #834445).
-%patch84 -p1 -b .auth-return-unauthorized
-# Fixed LDAP browsing issues (bug #870386).
-%patch85 -p1 -b .str3392
+%patch21 -p1 -b .0755
+# Add an SNMP query for HP's device ID OID (STR #3552).
+%patch22 -p1 -b .hp-deviceid-oid
+# Mark DNS-SD Device IDs that have been guessed at with "FZY:1;".
+%patch23 -p1 -b .dnssd-deviceid
+# Add an SNMP query for Ricoh's device ID OID (STR #3552).
+%patch24 -p1 -b .ricoh-deviceid-oid
+# Add support for systemd socket activation (patch from Lennart
+# Poettering).
+%patch25 -p1 -b .systemd-socket
+# Talk about systemd in cups-lpd manpage (part of bug #884641).
+%patch26 -p1 -b .lpd-manpage
+# Use IP address when resolving DNSSD URIs (bug #948288).
+%patch27 -p1 -b .avahi-address
+# Added usblp quirk for Canon PIXMA MP540 (bug #967873).
+%patch28 -p1 -b .usblp-quirks
+# Return from cupsEnumDests() once all records have been returned.
+%patch29 -p1 -b .enum-all
+# Prevent stringpool damage leading to memory leaks (bug #974048).
+%patch30 -p1 -b .stringpool-setprinterattr
+# Added IEEE 1284 Device ID for a Dymo device (bug #747866).
+%patch31 -p1 -b .dymo-deviceid
+# Default to IPP/1.1 for now (bug #977813).
+%patch32 -p1 -b .use-ipp1.1
+# Don't link against libgcrypt needlessly.
+%patch33 -p1 -b .no-gcry
+# Don't use D-Bus from two threads (bug #979748).
+%patch34 -p1 -b .avahi-no-threaded
+# Avoid sign-extending CRCs for gz decompression (bug #983486).
+%patch35 -p1 -b .gz-crc
 # Fixes for jobs with multiple files and multiple formats.
-%patch86 -p1 -b .ipp-multifile
-# Upstream patch for broken multipart handling (bug #852846).
-%patch87 -p1 -b .str3406-and-r8951.patch
-# Don't crash when job queued for printer that times out (bug #855431).
-%patch88 -p1 -b .str3754
-# Prevent stringpool corruption (bug #884851).
-%patch89 -p1 -b .stringpool-setprinterattr
-# Prevent format_log segfault (bug #971079).
-%patch90 -p1 -b .format_log-segfault
-# Fix 'collection' attribute sending (bug #978387).
-%patch91 -p1 -b .str3521
-# Fix SetEnv directive in cupsd.conf (bug #986495).
-%patch92 -p1 -b .setenv
-# Fix cupsctl man page typo (bug #1011076).
-%patch93 -p1 -b .cupsctl-man
-# Added new SyncOnClose directive to use fsync() after altering
-# configuration files: defaults to "Yes". Adjust in cupsd.conf (bug #984883).
-%patch94 -p1 -b .synconclose
-# Backported httpSetTimeout API function, and use it in ipp backend.
-%patch95 -p1 -b .settimeout
-# cups-polld: reconnect on error (bug #769292).
-%patch96 -p1 -b .polld-reconnect
-# Avoid replaying GSS credentials (bug #1040293).
-%patch97 -p1 -b .str3768
-# Fixed typo preventing web interface from changing driver (bug #1104483).
-%patch98 -p1 -b .str3601
-# Fixed timeout issue with cupsd reading when there is no data ready.
-%patch99 -p1 -b .nodatadelay
-# Applied patch to fix 'Bad request' errors as a result of adding in
-# httpSetTimeout (STR #4440).
-%patch100 -p1 -b .str4440
-# Fix CGI handling (STR #4454, bug #1120419).
-%patch101 -p1 -b .cgi
-# Fix for segfault in send_document (bug #1170002).
-%patch102 -p1 -b .send_document-crash
-# Only enable multi-part support for selected user agents
-# (bug #1178370, STR #3455).
-%patch103 -p1 -b .str3455
-# Apply upstream patch to fix PageLogFormat reference in documentation
-# (bug #951553, STR #3969).
-%patch104 -p1 -b .str3969
-# Apply patch to fix sanitize_title documentation (bug #988062, STR #4569).
-%patch105 -p1 -b .str4569
-# Added failover backend to support priority-based failover (bug #1115219).
-%patch106 -p1 -b .failover-backend
-# Apply upstream patch to prevent crash in cupsdContinueJob() (bug #1187840).
-%patch107 -p1 -b .sf01321303
-# Prevent cups-polld busy loop when access is restricted (bug #1164854).
-%patch108 -p1 -b .polld-busy-loop
-# Document ErrorPolicy in cupsd.conf manpage (bug #1120587, STR #4457).
-%patch109 -p1 -b .str4457
-# Validate ErrorPolicy directory when reading configuration (bug #1196217,
-# STR #4591).
-%patch110 -p1 -b .str4591
-# Apply patch for robustness in cookie parser (STR #4619).
-%patch111 -p1 -b .str4619
-# The socket backend could go into an infinite loop with certain printers
-# (bug #1276772, STR #3622)
-%patch112 -p1 -b .str3622
-# Don't unload jobs that couldn't be saved (bug #1283003, STR #4742).
-%patch113 -p1 -b .str4742
-# Reset job's kill_time in finalize_job() (bug #1293498).
-%patch114 -p1 -b .kill-time
-# IPP enters infinite loop consuming CPU (bug #1324158), Errors when issuing lp* commands (bug #1442206)
-%patch115 -p1 -b .ipp-consume-cpu
-# Banner pages do not show time-at-creation or time-at-processing (bug #1344782)
-%patch116 -p1 -b .banner-notime
-#  Invalid memory accesses lead to crash when configured class has implicit class as first member (bug #1219571)
-%patch117 -p1 -b .implicit-class
-# Using "lp -o orientation-requested=6" with a PDF file has no effect. (bug #1099617)
-%patch118 -p1 -b .orientreq
-# Printing PDF with fit-to-page doesn't take printer HW margins into account (bug #1268131) 
-%patch119 -p1 -b .fittopage
-# Web UI reports "novalue" for "completed at" (bug #1461191)
-%patch120 -p1 -b .completed-at-novalue
-
-# SECURITY PATCHES:
-%patch150 -p1 -b .CVE-2012-5519
-%patch151 -p1 -b .CVE-2014-2856
-%patch152 -p1 -b .CVE-2014-3537
-# CVE-2014-5029, CVE-2014-5030, CVE-2014-5031 (#1122601)
-%patch153 -p1 -b .CVE-2014-5029-5030-5031
+%patch36 -p1 -b .ipp-multifile
+# Full relro (bug #996740).
+%patch37 -p1 -b .full-relro
+# Increase web interface get-devices timeout to 10s (bug #996664).
+%patch38 -p1 -b .web-devices-timeout
+# Add SyncOnClose option (bug #984883).
+%patch39 -p1 -b .synconclose
+# Fix cupsGetPPD3() so it doesn't give the caller an unreadable file
+# (part of fix for CVE-2014-5031, STR #4500).
+%patch40 -p1 -b .str4500
+# Avoid stale lockfile in dbus notifier (bug #1030666).
+%patch41 -p1 -b .dbus-notifier
+# Prevent USB timeouts causing incorrect print output (bug #1036057).
+%patch42 -p1 -b .usb-timeout
+# Return jobs in rank order when handling IPP-Get-Jobs (bug #1046841).
+%patch43 -p1 -b .str4326
+# Apply upstream patch to improve cupsUser() (bug #1046845).
+%patch44 -p1 -b .str4327
+# Apply upstream patch to fix cross-site scripting flaw (CVE-2014-2856,
+# bug #1087122).
+%patch45 -p1 -b .CVE-2014-2856
+# Fix for cupsEnumDest() 'removed' callbacks (bug #1072954, STR #4380).
+%patch46 -p1 -b .str4380
+# Use colord interface correctly (bug #1087323).
+%patch47 -p1 -b .colord-interface
+# Apply upstream patch to avoid 10 second timeouts in cupsd caused by
+# reading when no data ready (bug #1110259).
+%patch48 -p1 -b .nodatadelay
+# Avoid race condition in cupsdReadClient() (bug #1113045).
+%patch49 -p1 -b .str4440
+# Describe ErrorPolicy in the cupsd.conf man page (bug #1120591).
+%patch50 -p1 -b .error-policy-manpage
+# Apply upstream patch to fix privilege escalation due to insufficient
+# checking (CVE-2014-3537, bug #1115576).
+%patch51 -p1 -b .CVE-2014-3537
+# Apply upstream patch to fix CVE-2014-5029 (bug #1122600),
+# CVE-2014-5030 (bug #1128764), CVE-2014-5031 (bug #1128767).
+%patch52 -p1 -b .CVE-2014-5029-5030-5031
 # Fix conf/log file reading for authenticated users (STR #4461).
-%patch154 -p1 -b .str4461
+%patch53 -p1 -b .str4461
 # Fix icon display in web interface during server restart (STR #4475).
-%patch155 -p1 -b .str4475
-# New SSLOptions directive to enable SSL3 and/or RC4, now disabled by
-# default (bug #1161171).
-%patch156 -p1 -b .str4476
+%patch54 -p1 -b .str4475
+# Support for failover without load-balancing (bug #1115219).
+%patch55 -p1 -b .failover-backend
 # Improper Update of Reference Count -- CVE-2015-1158
 # Cross-Site Scripting -- CVE-2015-1159
-# (bug #1229983)
-%patch157 -p1 -b .str4609
-# cupsRasterReadPixels buffer overflow -- CVE-2014-9679 (bug #1229983).
-%patch158 -p1 -b .str4551
-
+# (bug #1229985)
+%patch56 -p1 -b .str4609
+# cupsRasterReadPixels buffer overflow -- CVE-2014-9679 (bug #1229985).
+%patch57 -p1 -b .str4551
+# Don't use SSLv3 by default (bug #1161172, STR #4476).
+%patch58 -p1 -b .str4476
+# Validate ErrorPolicy in configuration (bug #1196218, STR #4591).
+%patch59 -p1 -b .str4591
+# Fix slow resume of jobs after restart (bug #1233006, STR #4646).
+%patch60 -p1 -b .str4646
+# Don't start jobs while cancelling others (bug #1233002, STR #4648).
+%patch61 -p1 -b .str4648
+# Start cups.service in multi-user target by default (bug #1236184).
+%patch62 -p1 -b .start-service
+# Email notifications ("lp -m") for printer classes don't work (bug #1257751)
+%patch63 -p1 -b .enotif
+# Gnome-settings-daemon leaks file descriptors (bug #1297035)
+%patch64 -p1 -b .fdleak
+# Printer State Message not cleared upon successful print job completion (bug #1353096)
+%patch65 -p1 -b .state-message
+# CUPS does not recognize changes to /etc/resolv.conf until CUPS restart (bug #1325692)
+%patch66 -p1 -b .resolv_reload
+# cups-lpd program did not catch all legacy usage of ISO-8859-1 (bug #1386751)
+%patch67 -p1 -b .legacy-iso88591
+# CUPS may fail to start if NIS groups are used (bug #1441860)
+%patch68 -p1 -b .ypbind
+# The -h option is overridden by _cupsSetDefaults settings when the IPP port is not given (bug #1430882)
+%patch69 -p1 -b .overriden-h
 %if %lspp
 # LSPP support.
-%patch200 -p1 -b .lspp
+%patch100 -p1 -b .lspp
 %endif
-
+# Failover backend won't fail-over if the printer is disconnected (bug #1469816)
+%patch70 -p1 -b .net-backends-etimedout-enotconn
+# Remove weak SSL/TLS ciphers from CUPS (bug #1466497)
+%patch71 -p1 -b .tlsv12
+# CUPS print jobs show incorrect number under the "pages" column (bug #1434153)
+%patch72 -p1 -b .page-count
 
 sed -i -e '1iMaxLogSize 0' conf/cupsd.conf.in
-
-cp %{SOURCE5} cups-lpd.real
-perl -pi -e "s,\@LIBDIR\@,%{_libdir},g" cups-lpd.real
 
 # Let's look at the compilation command lines.
 perl -pi -e "s,^.SILENT:,," Makedefs.in
 
-# Fix locale code for Norwegian (bug #520379).
-mv locale/cups_no.po locale/cups_nb.po
-
 f=CREDITS.txt
 mv "$f" "$f"~
 iconv -f MACINTOSH -t UTF-8 "$f"~ > "$f"
-rm "$f"~
+rm -f "$f"~
 
-# Rebuild configure script for --enable-avahi.
 aclocal -I config-scripts
 autoconf -I config-scripts
 
@@ -614,30 +404,29 @@ export CFLAGS="$RPM_OPT_FLAGS -fstack-protector-all -DLDAP_DEPRECATED=1"
 %if %lspp
 	--enable-lspp \
 %endif
-	--with-log-file-perm=0600 --enable-pie --enable-relro \
-	--enable-pdftops --with-pdftops=pdftops \
+	--with-cupsd-file-perm=0755 \
+	--with-log-file-perm=0600 \
+	--enable-relro \
 	--with-dbusdir=%{_sysconfdir}/dbus-1 \
-	--with-php=/usr/bin/php-cgi --enable-avahi \
+	--with-php=/usr/bin/php-cgi \
+	--enable-avahi \
+	--enable-threads --enable-openssl \
+	--enable-webif \
+	--with-xinetd=no \
 	localedir=%{_datadir}/locale
 
 # If we got this far, all prerequisite libraries must be here.
-make
+make %{?_smp_mflags}
 
 %install
-rm -rf $RPM_BUILD_ROOT
-
 make BUILDROOT=$RPM_BUILD_ROOT install 
 
-# Serial backend needs to run as root (bug #212577).
-chmod 700 $RPM_BUILD_ROOT%{cups_serverbin}/backend/serial
-
-rm -rf	$RPM_BUILD_ROOT%{initdir} \
+rm -rf	$RPM_BUILD_ROOT%{_initddir} \
 	$RPM_BUILD_ROOT%{_sysconfdir}/init.d \
 	$RPM_BUILD_ROOT%{_sysconfdir}/rc?.d
-mkdir -p $RPM_BUILD_ROOT%{initdir}
-install -m 755 %{SOURCE1} $RPM_BUILD_ROOT%{initdir}/cups
+mkdir -p $RPM_BUILD_ROOT%{_unitdir}
 
-find $RPM_BUILD_ROOT/usr/share/cups/model -name "*.ppd" |xargs gzip -n9f
+find $RPM_BUILD_ROOT%{_datadir}/cups/model -name "*.ppd" |xargs gzip -n9f
 
 %if %use_alternatives
 pushd $RPM_BUILD_ROOT%{_bindir}
@@ -655,23 +444,16 @@ mv lpc.8 lpc-cups.8
 popd
 %endif
 
-mkdir -p $RPM_BUILD_ROOT%{_datadir}/pixmaps $RPM_BUILD_ROOT%{_sysconfdir}/X11/sysconfig $RPM_BUILD_ROOT%{_sysconfdir}/X11/applnk/System $RPM_BUILD_ROOT%{_sysconfdir}/xinetd.d $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d $RPM_BUILD_ROOT%{_sysconfdir}/cron.daily
-install -c -m 644 %{SOURCE2} $RPM_BUILD_ROOT%{_datadir}/pixmaps
-install -c -m 644 cups-lpd.real $RPM_BUILD_ROOT%{_sysconfdir}/xinetd.d/cups-lpd
-install -c -m 644 %{SOURCE8} $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/cups
-install -c -m 755 %{SOURCE9} $RPM_BUILD_ROOT%{cups_serverbin}/backend/ncp
-install -c -m 700 %{SOURCE10} $RPM_BUILD_ROOT%{_sysconfdir}/cron.daily/cups
-install -c -m 755 %{SOURCE11} $RPM_BUILD_ROOT%{cups_serverbin}/filter/textonly
-install -c -m 644 %{SOURCE12} $RPM_BUILD_ROOT%{_datadir}/cups/model/textonly.ppd
+mkdir -p $RPM_BUILD_ROOT%{_datadir}/pixmaps $RPM_BUILD_ROOT%{_sysconfdir}/X11/sysconfig $RPM_BUILD_ROOT%{_sysconfdir}/X11/applnk/System $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d
+install -p -m 644 %{SOURCE2} $RPM_BUILD_ROOT%{_datadir}/pixmaps
+install -p -m 644 %{SOURCE3} %{buildroot}%{_unitdir}
+install -p -m 644 %{SOURCE4} %{buildroot}%{_unitdir}
+install -p -m 644 %{SOURCE6} $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/cups
+install -p -m 755 %{SOURCE7} $RPM_BUILD_ROOT%{cups_serverbin}/backend/ncp
 
-# Ship pstopdf for LSPP systems to deal with malicious postscript
-%if %lspp
-install -c -m 755 %{SOURCE4} $RPM_BUILD_ROOT%{cups_serverbin}/filter
-%endif
-
-# Ship pstoraster (bug #69573).
-install -c -m 755 %{SOURCE6} $RPM_BUILD_ROOT%{cups_serverbin}/filter
-install -c -m 644 %{SOURCE7} $RPM_BUILD_ROOT%{_datadir}/cups/mime
+# Ship an rpm macro for where to put driver executables.
+mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/rpm/
+install -m 0644 %{SOURCE8} $RPM_BUILD_ROOT%{_sysconfdir}/rpm/
 
 # Ship a printers.conf file, and a client.conf file.  That way, they get
 # their SELinux file contexts set correctly.
@@ -679,44 +461,103 @@ touch $RPM_BUILD_ROOT%{_sysconfdir}/cups/printers.conf
 touch $RPM_BUILD_ROOT%{_sysconfdir}/cups/classes.conf
 touch $RPM_BUILD_ROOT%{_sysconfdir}/cups/client.conf
 touch $RPM_BUILD_ROOT%{_sysconfdir}/cups/subscriptions.conf
-
-# This is %%ghost'ed, but needs to be created in %%install anyway.
 touch $RPM_BUILD_ROOT%{_sysconfdir}/cups/lpoptions
-
-# Tell portreserve which port we want it to protect.
-mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/portreserve
 
 # LSB 3.2 printer driver directory
 mkdir -p $RPM_BUILD_ROOT%{_datadir}/ppd
-
-echo ipp > $RPM_BUILD_ROOT%{_sysconfdir}/portreserve/%{name}
-
-# Handle https:// device URIs (bug #478677, STR #3122).
-ln -s ipp $RPM_BUILD_ROOT%{cups_serverbin}/backend/https
 
 # Remove unshipped files.
 rm -rf $RPM_BUILD_ROOT%{_mandir}/cat? $RPM_BUILD_ROOT%{_mandir}/*/cat?
 rm -f $RPM_BUILD_ROOT%{_datadir}/applications/cups.desktop
 rm -rf $RPM_BUILD_ROOT%{_datadir}/icons
+# there are pdf-banners shipped with cups-filters (#919489)
+rm -f $RPM_BUILD_ROOT%{_datadir}/cups/banners/{classified,confidential,secret,standard,topsecret,unclassified}
+rm -f $RPM_BUILD_ROOT%{_datadir}/cups/data/testprint
 
-# Put the php config bit into place
-%{__mkdir_p} %{buildroot}%{_sysconfdir}/php.d
-%{__cat} << __EOF__ > %{buildroot}%{_sysconfdir}/php.d/%{name}.ini
-; Enable %{name} extension module
-extension=phpcups.so
-__EOF__
+# install /usr/lib/tmpfiles.d/cups.conf (bug #656566, bug #893834)
+mkdir -p ${RPM_BUILD_ROOT}%{_tmpfilesdir}
+cat > ${RPM_BUILD_ROOT}%{_tmpfilesdir}/cups.conf <<EOF
+# See tmpfiles.d(5) for details
 
-# Install the udev rules.
-%{__mkdir_p} %{buildroot}/lib/udev/rules.d
-install -m644 %{SOURCE3} \
-	%{buildroot}/lib/udev/rules.d/70-cups-libusb.rules
+d /run/cups 0755 root lp -
+d /run/cups/certs 0511 lp sys -
+
+d /var/spool/cups/tmp - - - 30d
+EOF
+
+# /usr/lib/tmpfiles.d/cups-lp.conf (bug #812641)
+cat > ${RPM_BUILD_ROOT}%{_tmpfilesdir}/cups-lp.conf <<EOF
+# Legacy parallel port character device nodes, to trigger the
+# auto-loading of the kernel module on access.
+#
+# See tmpfiles.d(5) for details
+
+c /dev/lp0 0660 root lp - 6:0
+c /dev/lp1 0660 root lp - 6:1
+c /dev/lp2 0660 root lp - 6:2
+c /dev/lp3 0660 root lp - 6:3
+EOF
+
+find $RPM_BUILD_ROOT -type f -o -type l | sed '
+s:.*\('%{_datadir}'/\)\([^/_]\+\)\(.*\.po$\):%lang(\2) \1\2\3:
+/^%lang(C)/d
+/^\([^%].*\)/d
+' > %{name}.lang
 
 %post
-/sbin/chkconfig --del cupsd 2>/dev/null || true # Make sure old versions aren't there anymore
-/sbin/chkconfig --add cups || true
+%systemd_post %{name}.path %{name}.socket %{name}.service
+
 # Remove old-style certs directory; new-style is /var/run
 # (see bug #194581 for why this is necessary).
-/bin/rm -rf /etc/cups/certs
+rm -rf %{_sysconfdir}/cups/certs
+rm -f %{_localstatedir}/cache/cups/*.ipp %{_localstatedir}/cache/cups/*.cache
+
+# Deal with config migration due to CVE-2012-5519 (STR #4223)
+IN=%{_sysconfdir}/cups/cupsd.conf
+OUT=%{_sysconfdir}/cups/cups-files.conf
+copiedany=no
+for keyword in AccessLog CacheDir ConfigFilePerm	\
+    DataDir DocumentRoot ErrorLog FatalErrors		\
+    FileDevice FontPath Group LogFilePerm		\
+    LPDConfigFile PageLog Printcap PrintcapFormat	\
+    RemoteRoot RequestRoot ServerBin ServerCertificate	\
+    ServerKey ServerRoot SMBConfigFile StateDir		\
+    SystemGroup SystemGroupAuthKey TempDir User; do
+    if ! [ -f "$IN" ] || ! /bin/grep -wiq ^$keyword "$IN"; then continue; fi
+    copy=yes
+    if /bin/grep -wiq ^$keyword "$OUT"; then
+	if [ "`/bin/grep -wi ^$keyword "$IN"`" ==	\
+	     "`/bin/grep -wi ^$keyword "$OUT"`" ]; then
+	    copy=no
+	else
+	    /bin/sed -i -e "s,^$keyword\b,#$keyword,i" "$OUT" || :
+	fi
+    fi
+    if [ "$copy" == "yes" ]; then
+	if [ "$copiedany" == "no" ]; then
+	    (cat >> "$OUT" <<EOF
+
+# Settings automatically moved from cupsd.conf by RPM package:
+EOF
+	    ) || :
+	fi
+
+	(/bin/grep -wi ^$keyword "$IN" >> "$OUT") || :
+	copiedany=yes
+    fi
+
+    /bin/sed -i -e "s,^$keyword\b,#$keyword,i" "$IN" || :
+done
+
+# Comment out mistaken move of AccessLogLevel to
+# cups-files.conf (bug #1235035).
+for keyword in AccessLogLevel PageLogFormat; do
+    /bin/sed -i -e "s,^$keyword\b,#$keyword,i" "$OUT" || :
+done
+
+exit 0
+
+%post client
 %if %use_alternatives
 /usr/sbin/alternatives --install %{_bindir}/lpr print %{_bindir}/lpr.cups 40 \
 	 --slave %{_bindir}/lp print-lp %{_bindir}/lp.cups \
@@ -731,10 +572,12 @@ install -m644 %{SOURCE3} \
 	 --slave %{_mandir}/man1/lpq.1.gz print-lpqman %{_mandir}/man1/lpq-cups.1.gz \
 	 --slave %{_mandir}/man1/lpr.1.gz print-lprman %{_mandir}/man1/lpr-cups.1.gz \
 	 --slave %{_mandir}/man1/lprm.1.gz print-lprmman %{_mandir}/man1/lprm-cups.1.gz \
-	 --slave %{_mandir}/man1/lpstat.1.gz print-lpstatman %{_mandir}/man1/lpstat-cups.1.gz \
-	 --initscript cups
+	 --slave %{_mandir}/man1/lpstat.1.gz print-lpstatman %{_mandir}/man1/lpstat-cups.1.gz
 %endif
-rm -f %{_localstatedir}/cache/cups/*.ipp %{_localstatedir}/cache/cups/*.cache
+exit 0
+
+%post lpd
+%systemd_post cups-lpd.socket
 exit 0
 
 %post libs -p /sbin/ldconfig
@@ -742,470 +585,1017 @@ exit 0
 %postun libs -p /sbin/ldconfig
 
 %preun
-if [ "$1" = "0" ]; then
-	/sbin/service cups stop > /dev/null 2>&1
-	/sbin/chkconfig --del cups
+%systemd_preun %{name}.path %{name}.socket %{name}.service
+exit 0
+
+%preun client
 %if %use_alternatives
+if [ $1 -eq 0 ] ; then
 	/usr/sbin/alternatives --remove print %{_bindir}/lpr.cups
-%endif
 fi
+%endif
+exit 0
+
+%preun lpd
+%systemd_preun cups-lpd.socket
 exit 0
 
 %postun
-if [ "$1" -ge "1" ]; then
-	/sbin/service cups condrestart > /dev/null 2>&1
-fi
+%systemd_postun_with_restart %{name}.service
 exit 0
 
+%postun lpd
+%systemd_postun_with_restart cups-lpd.socket
+exit 0
+
+%triggerun -- %{name} < 1:1.5-0.9
+# Save the current service runlevel info
+# User must manually run systemd-sysv-convert --apply cups
+# to migrate them to systemd targets
+%{_bindir}/systemd-sysv-convert --save %{name} >/dev/null 2>&1 || :
+
+# This package is allowed to autostart:
+/bin/systemctl --no-reload enable %{name}.{service,socket,path} >/dev/null 2>&1 || :
+
+# Run these because the SysV package being removed won't do them
+/sbin/chkconfig --del cups >/dev/null 2>&1 || :
+/bin/systemctl try-restart %{name}.service >/dev/null 2>&1 || :
+
 %triggerin -- samba-client
-ln -sf ../../../bin/smbspool %{cups_serverbin}/backend/smb || :
+ln -sf %{_libexecdir}/samba/cups_backend_smb %{cups_serverbin}/backend/smb || :
 exit 0
 
 %triggerun -- samba-client
 [ $2 = 0 ] || exit 0
 rm -f %{cups_serverbin}/backend/smb
 
-%clean
-rm -rf $RPM_BUILD_ROOT
-
-%files
-%defattr(-,root,root)
-%doc LICENSE.txt README.txt CREDITS.txt CHANGES.txt
-/lib/udev/rules.d/70-cups-libusb.rules
-%dir %attr(0755,root,lp) /etc/cups
-%dir %attr(0755,root,lp) /var/run/cups
-%dir %attr(0511,lp,sys) /var/run/cups/certs
-%verify(not md5 size mtime) %config(noreplace) %attr(0640,root,lp) /etc/cups/cupsd.conf
-%attr(0640,root,lp) /etc/cups/cupsd.conf.default
-%verify(not md5 size mtime) %config(noreplace) %attr(0644,root,lp) /etc/cups/client.conf
-%verify(not md5 size mtime) %config(noreplace) %attr(0600,root,lp) /etc/cups/classes.conf
-%verify(not md5 size mtime) %config(noreplace) %attr(0600,root,lp) /etc/cups/printers.conf
-%verify(not md5 size mtime) %config(noreplace) %attr(0644,root,lp) /etc/cups/snmp.conf
-%verify(not md5 size mtime) %config(noreplace) %attr(0644,root,lp) /etc/cups/subscriptions.conf
-/etc/cups/interfaces
-%verify(not md5 size mtime) %config(noreplace) %attr(0644,root,lp) /etc/cups/lpoptions
-%dir %attr(0755,root,lp) /etc/cups/ppd
-%dir %attr(0700,root,lp) /etc/cups/ssl
-%{_datadir}/cups/mime/pstoraster.convs
-%config(noreplace) /etc/pam.d/cups
+%files -f %{name}.lang
+%doc README.txt CREDITS.txt CHANGES.txt
+%dir %attr(0755,root,lp) %{_sysconfdir}/cups
+%dir %attr(0755,root,lp) %{_localstatedir}/run/cups
+%dir %attr(0511,lp,sys) %{_localstatedir}/run/cups/certs
+%{_tmpfilesdir}/cups.conf
+%{_tmpfilesdir}/cups-lp.conf
+%verify(not md5 size mtime) %config(noreplace) %attr(0640,root,lp) %{_sysconfdir}/cups/cupsd.conf
+%verify(not md5 size mtime) %config(noreplace) %attr(0640,root,lp) %{_sysconfdir}/cups/cups-files.conf
+%attr(0640,root,lp) %{_sysconfdir}/cups/cupsd.conf.default
+%verify(not md5 size mtime) %config(noreplace) %attr(0644,root,lp) %{_sysconfdir}/cups/client.conf
+%verify(not md5 size mtime) %config(noreplace) %attr(0600,root,lp) %{_sysconfdir}/cups/classes.conf
+%verify(not md5 size mtime) %config(noreplace) %attr(0600,root,lp) %{_sysconfdir}/cups/printers.conf
+%verify(not md5 size mtime) %config(noreplace) %attr(0644,root,lp) %{_sysconfdir}/cups/snmp.conf
+%verify(not md5 size mtime) %config(noreplace) %attr(0640,root,lp) %{_sysconfdir}/cups/subscriptions.conf
+%{_sysconfdir}/cups/interfaces
+%verify(not md5 size mtime) %config(noreplace) %attr(0644,root,lp) %{_sysconfdir}/cups/lpoptions
+%dir %attr(0755,root,lp) %{_sysconfdir}/cups/ppd
+%dir %attr(0700,root,lp) %{_sysconfdir}/cups/ssl
+%config(noreplace) %{_sysconfdir}/pam.d/cups
 %config(noreplace) %{_sysconfdir}/logrotate.d/cups
-%config(noreplace) %{_sysconfdir}/portreserve/%{name}
 %dir %{_datadir}/%{name}/www
+%dir %{_datadir}/%{name}/www/ca
+%dir %{_datadir}/%{name}/www/cs
 %dir %{_datadir}/%{name}/www/es
-%dir %{_datadir}/%{name}/www/eu
+%dir %{_datadir}/%{name}/www/fr
 %dir %{_datadir}/%{name}/www/ja
-%dir %{_datadir}/%{name}/www/pl
 %dir %{_datadir}/%{name}/www/ru
 %{_datadir}/%{name}/www/images
 %{_datadir}/%{name}/www/*.css
 %doc %{_datadir}/%{name}/www/index.html
 %doc %{_datadir}/%{name}/www/help
 %doc %{_datadir}/%{name}/www/robots.txt
-%doc %{_datadir}/%{name}/www/de/index.html
+%doc %{_datadir}/%{name}/www/ca/index.html
+%doc %{_datadir}/%{name}/www/cs/index.html
 %doc %{_datadir}/%{name}/www/es/index.html
-%doc %{_datadir}/%{name}/www/eu/index.html
+%doc %{_datadir}/%{name}/www/fr/index.html
 %doc %{_datadir}/%{name}/www/ja/index.html
-%doc %{_datadir}/%{name}/www/pl/index.html
 %doc %{_datadir}/%{name}/www/ru/index.html
-%{initdir}/cups
+%{_unitdir}/%{name}.service
+%{_unitdir}/%{name}.socket
+%{_unitdir}/%{name}.path
 %{_bindir}/cupstestppd
 %{_bindir}/cupstestdsc
-%{_bindir}/cancel*
-%{_bindir}/lp*
 %{_bindir}/ppd*
-%dir %{cups_serverbin}
-%{cups_serverbin}/backend
+%{cups_serverbin}/backend/*
 %{cups_serverbin}/cgi-bin
 %dir %{cups_serverbin}/daemon
-%{cups_serverbin}/daemon/cups-polld
 %{cups_serverbin}/daemon/cups-deviced
 %{cups_serverbin}/daemon/cups-driverd
+%{cups_serverbin}/daemon/cups-exec
 %{cups_serverbin}/notifier
-%{cups_serverbin}/filter
+%{cups_serverbin}/filter/*
 %{cups_serverbin}/monitor
-%{cups_serverbin}/driver
-%{_mandir}/man1/cancel*
-%{_mandir}/man1/cupstest*
-%{_mandir}/man1/lp*
-%{_mandir}/man1/ppd*
-%{_mandir}/man[578]/*
+%{_mandir}/man[1578]/*
+# client subpackage
+%exclude %{_mandir}/man1/lp*.1.gz
+%exclude %{_mandir}/man1/cancel-cups.1.gz
+%exclude %{_mandir}/man8/lpc-cups.8.gz
+# devel subpackage
+%exclude %{_mandir}/man1/cups-config.1.gz
+# ipptool subpackage
+%exclude %{_mandir}/man1/ipptool.1.gz
+%exclude %{_mandir}/man5/ipptoolfile.5.gz
+# lpd subpackage
+%exclude %{_mandir}/man8/cups-lpd.8.gz
 %{_sbindir}/*
-%dir %{_datadir}/cups
-%dir %{_datadir}/cups/banners
-%{_datadir}/cups/banners/*
-%{_datadir}/cups/charsets
-%{_datadir}/cups/charmaps
-%{_datadir}/cups/data
-%{_datadir}/cups/fonts
-%{_datadir}/cups/model
+# client subpackage
+%exclude %{_sbindir}/lpc.cups
 %dir %{_datadir}/cups/templates
+%dir %{_datadir}/cups/templates/ca
+%dir %{_datadir}/cups/templates/cs
+%dir %{_datadir}/cups/templates/es
+%dir %{_datadir}/cups/templates/fr
+%dir %{_datadir}/cups/templates/ja
+%dir %{_datadir}/cups/templates/ru
 %{_datadir}/cups/templates/*.tmpl
-%{_datadir}/cups/templates/de/*.tmpl
+%{_datadir}/cups/templates/ca/*.tmpl
+%{_datadir}/cups/templates/cs/*.tmpl
 %{_datadir}/cups/templates/es/*.tmpl
-%{_datadir}/cups/templates/eu/*.tmpl
+%{_datadir}/cups/templates/fr/*.tmpl
 %{_datadir}/cups/templates/ja/*.tmpl
-%{_datadir}/cups/templates/pl/*.tmpl
 %{_datadir}/cups/templates/ru/*.tmpl
-%{_datadir}/locale/*
-%{_datadir}/ppd
-%dir %attr(1770,root,lp) /var/spool/cups/tmp
-%dir %attr(0710,root,lp) /var/spool/cups
-%dir %attr(0755,lp,sys) /var/log/cups
+%dir %attr(1770,root,lp) %{_localstatedir}/spool/cups/tmp
+%dir %attr(0710,root,lp) %{_localstatedir}/spool/cups
+%dir %attr(0755,lp,sys) %{_localstatedir}/log/cups
 %{_datadir}/pixmaps/cupsprinter.png
-%{_sysconfdir}/cron.daily/cups
 %config(noreplace) %{_sysconfdir}/dbus-1/system.d/cups.conf
-%{_datadir}/cups/drv
+%{_datadir}/cups/drv/sample.drv
 %{_datadir}/cups/examples
-%dir %{_datadir}/cups/mime
 %{_datadir}/cups/mime/mime.types
 %{_datadir}/cups/mime/mime.convs
-%dir %{_datadir}/cups/ppdc
 %{_datadir}/cups/ppdc/*.defs
 %{_datadir}/cups/ppdc/*.h
 
+%files client
+%{_sbindir}/lpc.cups
+%{_bindir}/cancel*
+%{_bindir}/lp*
+%{_mandir}/man1/lp*.1.gz
+%{_mandir}/man1/cancel-cups.1.gz
+%{_mandir}/man8/lpc-cups.8.gz
+
 %files libs
-%defattr(-,root,root)
+%doc LICENSE.txt
 %{_libdir}/*.so.*
 
+%files filesystem
+%dir %{cups_serverbin}
+%dir %{cups_serverbin}/backend
+%dir %{cups_serverbin}/driver
+%dir %{cups_serverbin}/filter
+%dir %{_datadir}/cups
+%if %lspp
+%{_datadir}/cups/banners/*
+%endif
+#%%dir %%{_datadir}/cups/charsets
+%dir %{_datadir}/cups/data
+%dir %{_datadir}/cups/drv
+%dir %{_datadir}/cups/mime
+%dir %{_datadir}/cups/model
+%dir %{_datadir}/cups/ppdc
+%dir %{_datadir}/ppd
+
 %files devel
-%defattr(-,root,root)
 %{_bindir}/cups-config
-%{_mandir}/man1/cups-config.1.gz
 %{_libdir}/*.so
 %{_includedir}/cups
+%{_mandir}/man1/cups-config.1.gz
+%{_sysconfdir}/rpm/macros.cups
 
 %files lpd
-%defattr(-,root,root)
-%config(noreplace) %{_sysconfdir}/xinetd.d/cups-lpd
-%dir %{cups_serverbin}
-%dir %{cups_serverbin}/daemon
+%{_unitdir}/cups-lpd.socket
+%{_unitdir}/cups-lpd@.service
 %{cups_serverbin}/daemon/cups-lpd
+%{_mandir}/man8/cups-lpd.8.gz
 
-%files php
-%defattr(-,root,root)
-%config(noreplace) %{_sysconfdir}/php.d/%{name}.ini
-%{php_extdir}/phpcups.so
+%files ipptool
+%{_bindir}/ipptool
+%dir %{_datadir}/cups/ipptool
+%{_datadir}/cups/ipptool/*
+%{_mandir}/man1/ipptool.1.gz
+%{_mandir}/man5/ipptoolfile.5.gz
 
 %changelog
-* Fri Dec 08 2017 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.4.2-79
-- 1461191 - Web UI reports "novalue" for "completed at"
+* Fri Dec 15 2017 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.6.3-35
+- 1466497 - Remove weak SSL/TLS ciphers from CUPS - fixing covscan issues
 
-* Thu Apr 27 2017 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.4.2-78
-- 1442206 - Errors when issuing lp* commands
+* Mon Dec 11 2017 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.6.3-34
+- 1466497 - Remove weak SSL/TLS ciphers from CUPS - fixing the patch
 
-* Tue Nov 01 2016 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.4.2-77
-- 1099617 - Using "lp -o orientation-requested=6" with a PDF file has no effect.
-- 1268131 - Printing PDF with fit-to-page doesn't take printer HW margins into account 
+* Wed Nov 01 2017 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.6.3-33
+- 1466497 - Remove weak SSL/TLS ciphers from CUPS
+- 1434153 - CUPS print jobs show incorrect number under the "pages" column
 
-* Thu Sep 22 2016 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.4.2-76
-- 1344782 - Banner pages do not show time-at-creation or time-at-processing
-- 1219571 - Invalid memory accesses lead to crash when configured class has implicit class as first member
+* Wed Oct 25 2017 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.6.3-32
+- 1468747 - CUPS failover backend allows multiple jobs to get stuck in failed queue
+- 1469816 - Failover backend won't fail-over if the printer is disconnected
 
-* Thu Sep 22 2016 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.4.2-75
-- 1324158 - IPP enters infinite loop consuming CPU
+* Mon Sep 25 2017 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.6.3-31
+- 1430882 - The -h option is overridden by _cupsSetDefaults settings when the IPP port is not given
 
-* Wed Jan 13 2016 Jiri Popelka <jpopelka@redhat.com> - 1:1.4.2-74
-- Reset job's kill_time in finalize_job() (bug #1293498).
+* Fri Sep 22 2017 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.6.3-30
+- 1386751 - cups-lpd program did not catch all legacy usage of ISO-8859-1
+- 1441860 - CUPS may fail to start if NIS groups are used 
 
-* Tue Jan 12 2016 Jiri Popelka <jpopelka@redhat.com> - 1:1.4.2-73
-- Fix failover backend options parsing (bug #1231322).
-- The socket backend could go into an infinite loop with certain printers
-  (bug #1276772, STR #3622)
-- dnssd backend: don't crash if avahi gives a callback with no TXT record
-  (bug #1269305)
-- Don't unload jobs that couldn't be saved (bug #1283003, STR #4742).
+* Thu Apr 06 2017 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.6.3-29
+- fixing cups-1.6.3-resolv_reload.patch for rhbz#1325692
 
-* Wed Jun 10 2015 Jiri Popelka <jpopelka@redhat.com> - 1:1.4.2-72
-- CVE-2015-1158, CVE-2015-1159, CVE-2014-9679 (bug #1229983).
+* Thu Mar 09 2017 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.6.3-28
+- 1325692 - CUPS does not recognize changes to /etc/resolv.conf until CUPS restart
 
-* Wed Apr 15 2015 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-71
-- Apply patch for robustness in cookie parser (STR #4619).
+* Wed Jul 20 2016 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.6.3-27
+- 1353096 - Printer State Message not cleared upon successful print job completion 
 
-* Wed Mar  4 2015 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-70
-- Fixed SetEnv patch (bug #1198394).
-- Validate ErrorPolicy directory when reading configuration (bug #1196217,
-  STR #4591).
+* Wed Jun 15 2016 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.6.3-26
+- 1302055 - Change symlink for smb backend to /usr/libexec/samba/cups_backend_smb
 
-* Mon Feb 23 2015 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-69
-- Document ErrorPolicy in cupsd.conf manpage (bug #1120587, STR #4457).
-- Prevent cups-polld busy loop when access is restricted (bug #1164854).
-- Apply upstream patch to prevent crash in cupsdContinueJob() (bug #1187840).
-- Added failover backend to support priority-based failover (bug #1115219).
-- Apply patch to fix sanitize_title documentation (bug #988062, STR #4569).
+* Wed Apr 27 2016 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.6.3-25
+- 1297035 - gnome-settings-daemon leaks file descriptors
+- 1257751 - Email notifications ("lp -m") for printer classes don't work
 
-* Fri Jan  9 2015 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-68
-- Apply upstream patch to fix PageLogFormat reference in documentation
-  (bug #951553, STR #3969).
-- Only enable multi-part support for selected user agents
-  (bug #1178370, STR #3455).
-- Fix for segfault in send_document (bug #1170002).
-- New SSLOptions directive to enable SSL3 and/or RC4, now disabled by
-  default (bug #1161171).
+* Tue Apr 19 2016 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.6.3-24
+- Fixing once more 1257051, 1259770
 
-* Mon Sep  1 2014 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-67
-- Revert change to whitelist /rss/ resources, as this was not used
-  upstream.
+* Tue Apr 19 2016 Zdenek Dohnal <zdohnal@redhat.com> - 1:1.6.3-23
+- 1257051 - cups-lpd man page incomplete
+- 1275790 - spec file includes triggers with overlapping version intervals
+- 1259770 - permission changed after writing to /etc/cups/subscriptions.conf 
 
-* Mon Sep  1 2014 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-66
-- More STR #4461 fixes from upstream: make rss feeds world-readable,
-  but cachedir private.
-- Fix icon display in web interface during server restart (STR #4475).
+* Tue Jul 21 2015 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-22
+- Start cups.service in multi-user target by default (bug #1236184),
+  not just cups.socket.
 
-* Wed Aug 27 2014 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-65
-- Fixes for upstream patch for STR #4461: allow /rss/ requests for
-  files we created.
+* Wed Jul  8 2015 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-21
+- Use upstream patch for STR #4648 (bug #1233002).
 
-* Tue Aug 26 2014 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-64
-- Use upstream patch for STR #4461.
+* Tue Jun 30 2015 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-20
+- Don't start jobs while cancelling others (bug #1233002, STR #4648).
+- Fix slow resume of jobs after restart (bug #1233006, STR #4646).
+- Fixes for post-install scriptlet (bug #1235035).
 
-* Thu Aug 14 2014 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-63
-- Applied upstream patch to fix CVE-2014-5029 (bug #1122600),
-  CVE-2014-5030 (bug #1128764), CVE-2014-5031 (bug #1128767).
-- Fix conf/log file reading for authenticated users (STR #4461).
+* Tue Jun 23 2015 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-19
+- Validate ErrorPolicy in configuration (bug #1196218, STR #4591).
+- Don't use SSLv3 by default (bug #1161172, STR #4476).
 
-* Fri Aug  1 2014 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-62
-- Fix CGI handling (STR #4454, bug #1120419).
+* Wed Jun 10 2015 Jiri Popelka <jpopelka@redhat.com> - 1:1.6.3-18
+- CVE-2015-1158, CVE-2015-1159, CVE-2014-9679 (bug #1229985).
 
-* Thu Jul 10 2014 Jiri Popelka <jpopelka@redhat.com> - 1:1.4.2-61
-- fix patch for CVE-2014-3537 (bug #1117794)
+* Tue Oct 21 2014 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-17
+- Support for failover without load-balancing (bug #1115219).
+- Fix cupsGetPPD3() so it doesn't give the caller an unreadable file
+  (part of fix for CVE-2014-5031, STR #4500).
+- Can no longer reproduce bug #1010580 so removing final-content-type
+  patch as it causes issues for some backends (bug #1149245).
+- Start cups.service after network.target (bug #1144780).
 
-* Wed Jul 09 2014 Jiri Popelka <jpopelka@redhat.com> - 1:1.4.2-60
-- CVE-2014-2856: cross-site scripting flaw (bug #1117798)
-- CVE-2014-3537: insufficient checking leads to privilege escalation (bug #1117794)
+* Tue Sep  2 2014 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-16
+- Apply upstream patch to fix CVE-2014-5029 (bug #1122600),
+  CVE-2014-5030 (bug #1128764), CVE-2014-5031 (bug #1128767). Also:
+  - Fix conf/log file reading for authenticated users (STR #4461).
+  - Fix icon display in web interface during server restart (STR #4475).
+- Apply upstream patch to fix privilege escalation due to insufficient
+  checking (CVE-2014-3537, bug #1115576).
+- Describe ErrorPolicy in the cupsd.conf man page (bug #1120591).
+- Reduce package dependencies (bug #1115057):
+  - New client subpackage containing command line client tools.
+  - Removed 'Requires: /sbin/chkconfig'.
+  - Moved 'Provides: lpd' to lpd subpackage.
+- Avoid race condition in cupsdReadClient() (bug #1113045).
+- Apply upstream patch to avoid 10 second timeouts in cupsd caused by
+  reading when no data ready (bug #1110259).
+- Use colord interface correctly (bug #1087323).
+- Fix for cupsEnumDest() 'removed' callbacks (bug #1072954, STR #4380).
 
-* Thu Jun 19 2014 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-59
-- Removed package description changes.
+* Fri Jul 25 2014 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-15
+- Apply upstream patch to fix cross-site scripting flaw (CVE-2014-2856,
+  bug #1087122).
 
-* Thu Jun 19 2014 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-58
-- Applied patch to fix 'Bad request' errors as a result of adding in
-  httpSetTimeout (STR #4440, also part of svn revision 9967).
+* Fri Jan 24 2014 Daniel Mach <dmach@redhat.com> - 1:1.6.3-14
+- Mass rebuild 2014-01-24
 
-* Mon Jun 16 2014 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-57
-- Fixed timeout issue with cupsd reading when there is no data ready
-  (bug #1110045).
+* Mon Jan 13 2014 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-13
+- Apply upstream patch to improve cupsUser() (bug #1046845).
 
-* Fri Jun 13 2014 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-56
-- Fixed synconclose patch to avoid 'too many arguments for format' warning.
-- Fixed settimeout patch to include math.h for fmod declaration.
+* Tue Jan  7 2014 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-12
+- Return jobs in rank order when handling IPP-Get-Jobs (bug #1046841).
+- dbus notifier: call _exit when handling SIGTERM (STR #4314, bug #1030666).
+- Use '-f' when using rm in %%setup section (bug #1046374).
 
-* Wed Jun 11 2014 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-55
-- Fixed typo preventing web interface from changing driver (bug #1104483,
-  STR #3601).
-- Fixed SyncOnClose patch (bug #984883).
+* Fri Dec 27 2013 Daniel Mach <dmach@redhat.com> - 1:1.6.3-11
+- Mass rebuild 2013-12-27
 
-* Wed Apr 30 2014 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-54
-- Use upstream patch to avoid replaying GSS credentials (bug #1040293).
+* Thu Nov 28 2013 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-10
+- Prevent USB timeouts causing incorrect print output (bug #1036057).
 
-* Thu Apr  3 2014 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-53
-- Prevent BrowsePoll problems across suspend/resume (bug #769292):
-  - Eliminate indefinite wait for response (svn revision 9688).
-  - Backported httpSetTimeout API function from CUPS 1.5 and use it in
-    the ipp backend so that we wait indefinitely until the printer
-    responds, we get a hard error, or the job is cancelled.
-  - cups-polld: reconnect on error.
-- Added new SyncOnClose directive to use fsync() after altering
-  configuration files: defaults to "Yes". Adjust in cupsd.conf (bug #984883).
-- Fix cupsctl man page typo (bug #1011076).
-- Use more portable rpm specfile syntax for conditional php building
-  (bug #988598).
-- Fix SetEnv directive in cupsd.conf (bug #986495).
-- Fix 'collection' attribute sending (bug #978387).
-- Prevent format_log segfault (bug #971079).
-- Prevent stringpool corruption (bug #884851).
-- Don't crash when job queued for printer that times out (bug #855431).
-- Upstream patch for broken multipart handling (bug #852846).
-- Install /etc/cron.daily/cups with correct permissions (bug #1012482).
+* Tue Nov 19 2013 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-9
+- Avoid stale lockfile in dbus notifier (bug #1030666).
 
-* Tue Aug  6 2013 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-52
-- Fixes for jobs with multiple files and multiple formats (bug #972242).
+* Thu Oct 31 2013 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-8
+- Set the default for SyncOnClose to Yes.
 
-* Thu Feb 28 2013 Tim Waugh <twaugh@redhat.com> 1:1.4.2-51
-- Applied patch to fix CVE-2012-5519 (privilege escalation for users
-  in SystemGroup or with equivalent polkit permission).  This prevents
-  HTTP PUT requests with paths under /admin/conf/ other than that for
-  cupsd.conf, and also prevents such requests altering certain
-  configuration directives such as PageLog and FileDevice (bug #875898).
+* Fri Sep 27 2013 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-7
+- Reverted upstream change to FINAL_CONTENT_TYPE in order to fix
+  printing to remote CUPS servers (bug #1013040).
 
-* Fri Oct 26 2012 Tim Waugh <twaugh@redhat.com> 1:1.4.2-50
-- Fixed LDAP browsing issues (bug #870386).
+* Wed Aug 21 2013 Jaromír Končický <jkoncick@redhat.com> - 1:1.6.3-6
+- Add SyncOnClose option (bug #984883).
 
-* Tue Aug 21 2012 Tim Waugh <twaugh@redhat.com> 1:1.4.2-49
-- Avoid "forbidden" error when moving job between queues via web UI
-  (bug #834445).
+* Fri Aug 16 2013 Tim Waugh <twaugh@redhat.com>
+- Increase web interface get-devices timeout to 10s (bug #996664).
 
-* Mon May 21 2012 Tim Waugh <twaugh@redhat.com> 1:1.4.2-48
-- Fix German translation of web interface search template (STR #3635,
-  bug #806818).
+* Thu Aug 15 2013 Tim Waugh <twaugh@redhat.com>
+- Build with full read-only relocations (bug #996740).
 
-* Mon Mar 19 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-47
-- cupsPrintFiles() did not report all errors (STR #3449, bug #740093)
+* Tue Aug  6 2013 Tim Waugh <twaugh@redhat.com>
+- Fixes for jobs with multiple files and multiple formats.
 
-* Mon Mar 19 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-46
-- Fix lp and lpr return string (bug #740093).
+* Wed Jul 24 2013 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-5
+- Fixed cups-config, broken by last change (bug #987660).
 
-* Tue Feb 14 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-45
-- Don't create zero-length request files (bug #740093).
-- The lp and lpr commands did not cancel jobs queued from stdin on an error
-  (STR #4015, bug #738914).
-- Fixed condition in textonly filter to create temporary file
-  regardless of the number of copies specified. (bug #738410)
+* Tue Jul 23 2013 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-4
+- Added LSPP banner pages back in (bug #974362).
 
-* Tue Oct 18 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-44
-- Init script should source /etc/sysconfig/cups (bug #744791)
+* Mon Jul 22 2013 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-3
+- Removed stale comment in spec file.
+- Link against OpenSSL instead of GnuTLS.
 
-* Wed Sep 07 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-43
-- The scheduler might leave old job data files in the spool directory
-  (STR #3795, STR #3880, bug #735505).
+* Thu Jul 18 2013 Tim Waugh <twaugh@redhat.com> - 1:1.6.3-2
+- Fixed downoad URL to point to the actual source, not a download
+  page.
 
-* Mon Aug 29 2011 Tim Waugh <twaugh@redhat.com> 1:1.4.2-42
-- A further fix for imageto* filters crashing with bad GIF files
-  (STR #3914, bug #714118).
+* Fri Jul 12 2013 Jiri Popelka <jpopelka@redhat.com> - 1:1.6.3-1
+- 1.6.3
 
-* Wed Jul 27 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-41
-- The imageto* filters could crash with bad GIF files (STR #3867, bug #714118).
+* Thu Jul 11 2013 Tim Waugh <twaugh@redhat.com> 1:1.6.2-18
+- Avoid sign-extending CRCs for gz decompression (bug #983486).
 
-* Thu Jun 16 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-40
-- Map ASCII to ISO-8859-1 in the transcoding code (STR #3832, bug #681836).
-- Check for empty values for some configuration directives (STR #3861, bug #706673).
-- The network backends no longer try to collect SNMP supply and status
-  information for raw queues (STR #3809, bug #709896).
-- Handle EAI_NONAME when resolving hostnames (bug #712430).
+* Wed Jul 10 2013 Tim Waugh <twaugh@redhat.com> 1:1.6.2-17
+- Fixed download URL.
 
-* Tue Feb 01 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-39
-- Fixed typo in sample snmp.conf file (bug #672614).
+* Wed Jul 10 2013 Jiri Popelka <jpopelka@redhat.com> - 1:1.6.2-16
+- Remove pstops cost factor tweak from conf/mime.convs.in
 
-* Thu Jan 20 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-38
-- Call avc_init() only once to not leak file descriptors (bug #668010).
+* Mon Jul  1 2013 Tim Waugh <twaugh@redhat.com> 1:1.6.2-15
+- Don't use D-Bus from two threads (bug #979748).
 
-* Thu Dec 09 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-37
-- Fixed cupsSNMPQuirks parsing code in cups-snmp-quirks.patch (bug #580604).
-- lpstat -p reported current job as job id zero (STR #3627, bug #614908).
-- Set the default RIPCache to 128m (STR #3535, bug #616864).
-- Scheduler tracks whether we are shutting down and doesn't start
-  new jobs if so (STR #3679, bug #624441).
-- Added 'restartlog' action to initscript usage output (bug #632180).
-- Fixed following rpmlint errors and warnings (bug #634931):
-  - Fix character encoding in CREDITS.txt.
-  - Mark D-Bus configuration file as config file.
-  - Don't mark MIME types and convs files as config files.  Overrides
-    can be placed as new *.types/*.convs files in /etc/cups.
-  - Don't mark banners as config files.  Better is to provide new banners.
-  - Don't mark initscript as config file.
-  - Don't mark templates and www files as config files.  A better way to
-    provide local overrides is to use a different ServerRoot setting.
-    Note that a recent security fix required changed to template files.
-  - Provide versioned LPRng symbol for rpmlint.
-  - Use mode 0755 for binaries and libraries where appropriate.
-  - Move /etc/cups/pstoraster.convs to /usr/share/cups/mime/.
-  - Move cups-config man page to the devel sub-package.
-- Revert STR #2537 so non-UTF-8 clients continue to be accepted (bug #642448).
+* Fri Jun 28 2013 Tim Waugh <twaugh@redhat.com> 1:1.6.2-14
+- Fix for DNSSD name resolution.
+
+* Wed Jun 26 2013 Tim Waugh <twaugh@redhat.com> 1:1.6.2-13
+- Don't link against libgcrypt needlessly.
+
+* Wed Jun 26 2013 Tim Waugh <twaugh@redhat.com> 1:1.6.2-12
+- Default to IPP/1.1 for now (bug #977813).
+
+* Tue Jun 25 2013 Tim Waugh <twaugh@redhat.com> 1:1.6.2-11
+- Added usblp quirk for Canon PIXMA MP540 (bug #967873).
+
+* Tue Jun 18 2013 Tim Waugh <twaugh@redhat.com> 1:1.6.2-10
+- Added IEEE 1284 Device ID for a Dymo device (bug #747866).
+
+* Thu Jun 13 2013 Tim Waugh <twaugh@redhat.com> 1:1.6.2-9
+- Prevent stringpool damage leading to memory leaks (bug #974048).
+
+* Tue Jun  4 2013 Tim Waugh <twaugh@redhat.com> - 1:1.6.2-8
+- Return from cupsEnumDests() once all records have been returned.
+
+* Thu May 23 2013 Jiri Popelka <jpopelka@redhat.com> - 1:1.6.2-7
+- Added more USB quirks for the libusb-based backend (STR #4311)
+
+* Thu May 23 2013 Jiri Popelka <jpopelka@redhat.com> - 1:1.6.2-6
+- don't ship Russian web templates because they're broken (#960571, STR #4310)
+
+* Wed May 15 2013 Jiri Popelka <jpopelka@redhat.com> - 1:1.6.2-5
+- move cups/ppdc/ to filesystem subpackage
+
+* Wed Apr 10 2013 Tim Waugh <twaugh@redhat.com>
+- cups-dbus-utf.patch: now that the scheduler only accepts valid UTF-8
+  strings for job-name, there's no need to validate it as UTF-8 in the
+  dbus notifier.
+
+* Thu Apr  4 2013 Tim Waugh <twaugh@redhat.com> 1:1.6.2-4
+- Use IP address when resolving DNSSD URIs (bug #948288).
+
+* Thu Mar 28 2013 Tim Waugh <twaugh@redhat.com> 1:1.6.2-3
+- Check for cupsd.conf existence prior to grepping it (bug #928816).
+
+* Tue Mar 19 2013 Jiri Popelka <jpopelka@redhat.com> - 1:1.6.2-2
+- revert previous bug #919489 fix (i.e we don't ship banners now)
+
+* Mon Mar 18 2013 Jiri Popelka <jpopelka@redhat.com> - 1:1.6.2-1
+- 1.6.2
+
+* Wed Mar 13 2013 Jiri Popelka <jpopelka@redhat.com> - 1:1.6.1-26
+- ship banners again (#919489)
+
+* Tue Mar  5 2013 Tim Waugh <twaugh@redhat.com> 1:1.6.1-25
+- Talk about systemd in cups-lpd manpage (part of bug #884641).
+
+* Tue Mar  5 2013 Tim Waugh <twaugh@redhat.com> 1:1.6.1-24
+- Documentation fixes from STR #4223 (bug #915981).
+
+* Wed Feb 27 2013 Jiri Popelka <jpopelka@redhat.com> - 1:1.6.1-23
+- Removed obsolete browsing directives from cupsd.conf (bug #880826, STR #4157).
+- Updated summary and descriptions (#882982).
+- Fixed bogus dates in changelog.
+
+* Fri Feb 15 2013 Tim Waugh <twaugh@redhat.com> 1:1.6.1-22
+- Applied colorman fix from STR #4232 and STR #4276.
+
+* Wed Feb 13 2013 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1:1.6.1-21
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_19_Mass_Rebuild
+
+* Fri Jan 18 2013 Jiri Popelka <jpopelka@redhat.com> 1:1.6.1-20
+- Add quirk rule for Canon MP210 (#847923).
+
+* Mon Jan 14 2013 Jiri Popelka <jpopelka@redhat.com> 1:1.6.1-19
+- Fix unowned directories (#894531).
+
+* Thu Jan 10 2013 Jiri Popelka <jpopelka@redhat.com> 1:1.6.1-18
+- Clean /var/spool/cups/tmp with tmpfiles.d instead of tmpwatch&cron (#893834).
+
+* Wed Dec 19 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.6.1-17
+- Migrate cups-lpd from xinetd to systemd socket activatable service (#884641).
+- Clean up old Requires/Conflicts/Obsoletes/Provides.
+
+* Thu Dec  6 2012 Tim Waugh <twaugh@redhat.com> 1:1.6.1-16
+- Additional fix relating to CVE-2012-5519 to avoid misleading error
+  message about actions to take to enable file device URIs.
+
+* Tue Dec  4 2012 Tim Waugh <twaugh@redhat.com> 1:1.6.1-15
+- Small error handling improvements in the configuration migration
+  script.
+
+* Mon Dec  3 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.6.1-14
+- move ipptoolfile(5) to ipptool subpackage
+
+* Mon Dec  3 2012 Tim Waugh <twaugh@redhat.com> 1:1.6.1-13
+- Applied additional upstream patch for CVE-2012-5519 so that the
+  RemoteRoot keyword is recognised in the correct configuration file.
+
+* Wed Nov 28 2012 Tim Waugh <twaugh@redhat.com> 1:1.6.1-12
+- Fixed paths in config migration %%post script.
+- Set default cups-files.conf filename.
+
+* Mon Nov 26 2012 Tim Waugh <twaugh@redhat.com> 1:1.6.1-11
+- Apply upstream fix for CVE-2012-5519 (STR #4223, bug #875898).
+  Migrate configuration keywords as needed.
+
+* Mon Nov 19 2012 Tim Waugh <twaugh@redhat.com> 1:1.6.1-10
+- Re-enable the web interface as it is required for adjusting server
+  settings (bug #878090).
+
+* Tue Nov  6 2012 Tim Waugh <twaugh@redhat.com> 1:1.6.1-9
+- Disable the web interface by default (bug #864522).
+
+* Tue Oct 30 2012 Tim Waugh <twaugh@redhat.com> 1:1.6.1-8
+- Ensure attributes are valid UTF-8 in dbus notifier (bug #863387).
+
+* Mon Oct 29 2012 Tim Waugh <twaugh@redhat.com> 1:1.6.1-7
+- Removed broken cups-get-classes patch (bug #870612).
+
+* Mon Oct 22 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.6.1-6
+- Add quirk rule for Xerox Phaser 3124 (#867392)
+- backport more quirk rules (STR #4191)
+
+* Thu Sep 20 2012 Tim Waugh <twaugh@redhat.com> 1:1.6.1-5
+- The cups-libs subpackage contains code distributed under the zlib
+  license (md5.c). 
+
+* Thu Aug 23 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.6.1-4
+- quirk handler for port reset done by new USB backend (bug #847923, STR #4155)
+
+* Mon Aug 13 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.6.1-3
+- fixed usage of parametrized systemd macros (#847405)
+
+* Wed Aug 08 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.6.1-2
+- Requires: cups-filters
+
+* Wed Aug 08 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.6.1-1
+- 1.6.1
+ - simplified systemd.patch due to removed CUPS Browsing protocol (STR #3922)
+ - removed:
+   textonly filter - moved to cups-filters
+   pstopdf filter - cups-filters also has pstopdf (different)
+   PHP module - moved to cups-filters (STR #3932)
+   serial.patch - moved to cups-filters
+   getpass.patch - r10140 removed the getpass() use
+   snmp-quirks.patch - fixed upstream (r10493)
+   avahi patches - merged upstream (STR #3066)
+   icc.patch - merged upstream (STR #3808)
+ - TODO:
+   - do we need cups-build.patch ?
+- added filesystem sub-package (#624695)
+- use macroized systemd scriptlets
+
+* Thu Jul 26 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.5.4-1
+- 1.5.4
+
+* Tue Jul 24 2012 Tim Waugh <twaugh@redhat.com> 1:1.5.3-5
+- Don't enable IP-based systemd socket activation by default (bug #842365).
+
+* Wed Jul 18 2012 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1:1.5.3-4
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_18_Mass_Rebuild
+
+* Tue Jun 05 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.5.3-3
+- Require systemd instead of udev.
+
+* Mon May 28 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.5.3-2
+- Buildrequire libusb1 (STR #3477)
+
+* Tue May 15 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.5.3-1
+- 1.5.3
+
+* Wed May 09 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.5.2-13
+- Add triggers for samba4-client. (#817110)
+- No need to define BuildRoot and clean it in clean and install section anymore.
+- %%defattr no longer needed in %%files sections.
+
+* Tue Apr 17 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.5.2-12
+- Install /usr/lib/tmpfiles.d/cups-lp.conf to support /dev/lp* devices (#812641)
+- Move /etc/tmpfiles.d/cups.conf to /usr/lib/tmpfiles.d/ (#812641)
+
+* Tue Apr 17 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.5.2-11
+- The IPP backend did not always setup username/password authentication
+  for printers (bug #810007, STR #3985)
+- Detect authentication errors for all requests.
+  (bug #810007, upstream commit revision10277)
+
+* Thu Mar 29 2012 Tim Waugh <twaugh@redhat.com> 1:1.5.2-10
+- Removed private-shared-object-provides filter lines as they are not
+  necessary (see bug #807767 comment #3).
+
+* Thu Mar 29 2012 Mamoru Tasaka <mtasaka@fedoraproject.org> - 1:1.5.2-9
+- Rebuild against fixed rpm (bug #807767)
+
+* Wed Mar 28 2012 Tim Waugh <twaugh@redhat.com> 1:1.5.2-8
+- Avoid systemd PrivateTmp bug by explicitly requiring the fixed
+  version of systemd (bug #807672).
+
+* Fri Mar 16 2012 Tim Waugh <twaugh@redhat.com> 1:1.5.2-7
+- Removed debugging messages from systemd-socket patch.
+
+* Wed Mar 14 2012 Tim Waugh <twaugh@redhat.com> 1:1.5.2-6
+- Pulled in bugfixes from Avahi patches on fedorapeople.org.
+
+* Tue Feb 28 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.5.2-5
+- If the translated message is empty return the original message
+  (bug #797570, STR #4033).
+
+* Thu Feb 23 2012 Tim Waugh <twaugh@redhat.com> 1:1.5.2-4
+- cups-polld: restart polling on error (bug #769292, STR #4031).
+
+* Thu Feb 16 2012 Tim Waugh <twaugh@redhat.com> 1:1.5.2-3
+- Removed hard requirement on colord as it is optional.
+
+* Wed Feb 15 2012 Tim Waugh <twaugh@redhat.com> 1:1.5.2-2
+- Synthesize notify-printer-uri for job-completed events where the job
+  never started processing (bug #784786, STR #4014).
+- Removed banners from LSPP patch on Dan Walsh's advice.
+
+* Mon Feb 06 2012 Jiri Popelka <jpopelka@redhat.com> 1:1.5.2-1
+- 1.5.2
+- Updated FSF address in pstopdf and textonly filters
+
+* Wed Jan 18 2012 Remi Collet <remi@fedoraproject.org> 1:1.5.0-28
+- build against php 5.4.0, patch for STR #3999
+- add filter to fix private-shared-object-provides
+- add %%check for php extension
+
+* Tue Jan 17 2012 Tim Waugh <twaugh@redhat.com> 1:1.5.0-27
+- Use PrivateTmp=true in the service file (bug #782495).
+
+* Tue Jan 17 2012 Tim Waugh <twaugh@redhat.com> 1:1.5.0-26
+- Replace newline characters with spaces in reported Device IDs
+  (bug #782129, STR #4005).
+- Don't accept Device URIs of '\0' from SNMP devices
+  (bug #770646, STR #4004).
+
+* Fri Jan 13 2012 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1:1.5.0-25
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_17_Mass_Rebuild
+
+* Wed Dec 21 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-24
+- Fixed textonly filter to work with single copies (bug #738412).
+
+* Fri Dec  9 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-23
+- Detangle cups-serverbin-compat.patch from cups-lspp.patch.
+- Bind to datagram socket as well in systemd cups.socket unit file, to
+  prevent that port being stolen by another service (bug #760070).
+
+* Fri Nov 11 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-22
+- Fixed trigger (bug #748841).
+
+* Wed Nov  9 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-21
+- Set correct systemd service default on upgrade, once updates are
+  applied (bug #748841).
+
+* Fri Nov  4 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-20
+- Set the correct PostScript command filter for e.g. foomatic queues
+  (STR #3973).
+
+* Mon Oct 31 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-19
+- Set correct systemd service default on upgrade (bug #748841).
+
+* Wed Oct 19 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-18
+- Make sure to guard against retrying the Avahi connection whilst
+  already doing so (Ubuntu #877967).
+
+* Tue Oct 18 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-17
+- Use libsystemd-daemon instead of bundling sd-daemon.c.
+
+* Tue Oct 11 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-16
+- Use upstream fix for driverd issue (bug #742989).
+- Array handling fixes for DNSSDPrinters.
+- Array handling fixes for Avahi poll implementation.
+- Increase client blocking timeout from 30s to 70s (bug #744715).
+- Set BindIPv6Only=ipv6-only in systemd socket unit file as better fix
+  for bug #737230.
+
+* Fri Oct  7 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-15
+- Fixed Timeouts array comparison function (Ubuntu #860691).
+
+* Wed Oct  5 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-14
+- Handle "localhost" resolving to 127.0.0.1 on IPv6-addressed systems
+  (bug #737230).
+
+* Tue Oct  4 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-13
+- Work around PPDs cache handling issue (bug #742989).
+
+* Tue Oct  4 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-12
+- More fixes for systemd socket activation:
+  - relax permissions check for domain socket in libcups.
+  - initialise addrlen before calling getsockname().
+
+* Mon Oct 03 2011 Richard Hughes <rhughes@redhat.com> 1:1.5.0-11
+- Updated colord patch with fixes to DeleteDevice.
+- Resolves https://bugzilla.redhat.com/show_bug.cgi?id=741697
+
+* Wed Sep 28 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-10
+- Fixed string manipulation in the dbus notifier (STR #3947, bug #741833).
+
+* Thu Sep 22 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-9
+- Fixed systemd socket activation support (bug #738709, bug #738710).
+
+* Wed Sep 14 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-8
+- Prevent libcups crash in cups-get-classes patch (bug #736698).
+
+* Thu Sep  1 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-7
+- Use PathExistsGlob instead of DirectoryNotEmpty in cups.path
+  (bug #734435).
+
+* Fri Aug 19 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-6
+- Tighten explicit libs sub-package requirement so that it includes
+  the correct architecture as well (bug #731421 comment #8).
+
+* Fri Aug 19 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-5
+- Avoid GIF reader loop (CVE-2011-2896, STR #3914, bug #727800).
+
+* Wed Aug 17 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-4
+- Enable systemd units by default (bug #731421).
+
+* Mon Aug  8 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-3
+- Updated avahi support to register sub-types.
+
+* Fri Aug  5 2011 Tim Waugh <twaugh@redhat.com> 1:1.5.0-2
+- Ported avahi support from 1.4.
+
+* Tue Jul 26 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.5.0-1
+- 1.5.0
+
+* Wed Jul 20 2011 Tim Waugh <twaugh@redhat.com> 1:1.5-0.16.rc1
+- Don't delete job data files when restarted (STR #3880).
+
+* Fri Jul 15 2011 Tim Waugh <twaugh@redhat.com> 1:1.5-0.15.rc1
+- Ship an rpm macro for where to put driver executables.
+
+* Thu Jul  7 2011 Tim Waugh <twaugh@redhat.com> 1:1.5-0.14.rc1
+- Undo last change which had no effect.  We already remove the .SILENT
+  target from the Makefile as part of the build.
+
+* Thu Jul  7 2011 Tim Waugh <twaugh@redhat.com> 1:1.5-0.13.rc1
+- Make build log verbose enough to include compiler flags used.
+
+* Tue Jul  5 2011 Tim Waugh <twaugh@redhat.com> 1:1.5-0.12.rc1
+- Removed udev rules file as it is no longer necessary.
+
+* Tue Jul  5 2011 Tim Waugh <twaugh@redhat.com> 1:1.5-0.11.rc1
+- Add support for systemd socket activation (patch from Lennart
+  Poettering).
+
+* Wed Jun 29 2011 Tim Waugh <twaugh@redhat.com> 1:1.5-0.10.rc1
+- Don't use portreserve any more.  Better approach is to use systemd
+  socket activation (not yet done).
+
+* Wed Jun 29 2011 Tim Waugh <twaugh@redhat.com> 1:1.5-0.9.rc1
+- Ship systemd service unit instead of SysV initscript (bug #690766).
+
+* Wed Jun 29 2011 Tim Waugh <twaugh@redhat.com> 1:1.5-0.8.rc1
+- Tag localization files correctly (bug #716421).
+
+* Wed Jun 15 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.5-0.7.rc1
+- 1.5rc1
+
+* Sat Jun 04 2011 Richard Hughes <rhughes@redhat.com> 1:1.5-0.6.b2
+- Updated colord patch with fixes from Tim Waugh.
+
+* Tue May 31 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.5-0.5.b2
+- enable LSPP support again
+
+* Tue May 31 2011 Richard Hughes <rhughes@redhat.com> 1:1.5-0.4.b2
+- Updated colord patch against 1.5 upstream and fixes from Tim Waugh.
+
+* Tue May 31 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.5-0.3.b2
+- fix lspp.patch to not include "config.h" in cups/cups.h (#709384)
+
+* Thu May 26 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.5-0.2.b2
+- 1.5b2
+
+* Tue May 24 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.5-0.1.b1
+- 1.5b1
+  - removed cups-texttops-rotate-page.patch (#572338 is CANTFIX)
+  - removed cups-page-label.patch (#520141 seems to be CANTFIX)
+
+* Wed May 18 2011 Tim Waugh <twaugh@redhat.com> 1:1.4.6-17
+- Package parallel port printer device nodes (bug #678804).
+
+* Tue May 17 2011 Richard Hughes <rhughes@redhat.com> 1:1.4.6-16
+- Updated colord patch from upstream review.
+
+* Fri Mar 25 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.4.6-15
+- Polished patches according to results from static analysis of code (bug #690130).
+
+* Thu Mar 10 2011 Tim Waugh <twaugh@redhat.com> 1:1.4.6-14
+- Fixed some typos in colord patch.
+- LSPP: only warn when unable to get printer context.
+
+* Mon Mar 07 2011 Richard Hughes <rhughes@redhat.com> 1:1.4.6-13
+- Updated colord patch.
+
+* Fri Feb 25 2011 Tim Waugh <twaugh@redhat.com> 1:1.4.6-12
+- Fixed build failure due to php_zend_api macro type.
+
+* Fri Feb 25 2011 Tim Waugh <twaugh@redhat.com> 1:1.4.6-11
+- Fixed dbus notifier support for job-state-changed.
+
+* Thu Feb 10 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.4.6-10
+- Remove testing cups-usb-buffer-size.patch (bug #661814).
+
+* Tue Feb 08 2011 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1:1.4.6-9
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_15_Mass_Rebuild
+
+* Tue Feb 01 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.4.6-8
+- Use Till's patch to fix USB-Parallel adapter cable problem (bug #624564).
+
+* Tue Jan 25 2011 Tim Waugh <twaugh@redhat.com> 1:1.4.6-7
+- Some fixes for the AvahiClient callback (bug #672143).
+
+* Tue Jan 18 2011 Tim Waugh <twaugh@redhat.com> 1:1.4.6-6
+- Don't use --enable-pie configure option as it has been removed and
+  is now assumed.  See STR #3691.
+
+* Fri Jan 14 2011 Tim Waugh <twaugh@redhat.com> 1:1.4.6-5
+- ICC colord support.
+
+* Wed Jan 12 2011 Tim Waugh <twaugh@redhat.com> 1:1.4.6-4
+- Properly separated serverbin-compat and lspp patches.
+- Updated ICC patch (still not yet applied).
+
+* Tue Jan 11 2011 Tim Waugh <twaugh@redhat.com> 1:1.4.6-3
+- Build requires automake for avahi support.
+
+* Mon Jan 10 2011 Tim Waugh <twaugh@redhat.com> 1:1.4.6-2
+- Use a smaller buffer when writing to USB devices (bug #661814).
+- Handle EAI_NONAME when resolving hostnames (bug #617208).
+
+* Fri Jan 07 2011 Jiri Popelka <jpopelka@redhat.com> 1:1.4.6-1
+- 1.4.6.
+
+* Fri Dec 31 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.5-10
+- Some Avahi support fixes from Till Kamppeter.
+
+* Fri Dec 24 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.5-9
+- Native Avahi support for announcing printers on the network.
+
+* Wed Dec 22 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.5-8
+- Don't crash when job queued for browsed printer that times out
+  (bug #660604).
+
+* Mon Dec 13 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.5-7
+- Call avc_init() only once to not leak file descriptors (bug #654075).
+
+* Thu Dec  9 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.5-6
+- The cups-config man page has been moved to the devel sub-package.
 - The php sub-package now explicitly requires the libs package with
   the same version and release (bug #646814).
-- Added tolerance for DNS failures (bug #654667).
-- Fixed initscript to stop service on reboot/halt (bug #659692).
 
-* Thu Oct 28 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.2-36
+* Tue Dec  7 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.5-5
+- Fixed character encoding in CREDITS.txt.
+- Mark D-Bus configuration file as config file.
+- Don't mark MIME types and convs files as config files.  Overrides
+  can be placed as new *.types/*.convs files in /etc/cups.
+- Don't mark banners as config files.  Better is to provide new
+  banners.
+- Don't mark templates and www files as config files.  A better way to
+  provide local overrides is to use a different ServerRoot setting.
+  Note that a recent security fix required changed to template files.
+- Provide versioned LPRng symbol for rpmlint.
+
+* Mon Dec  6 2010 Tim Waugh <twaugh@redhat.com>
+- /usr/sbin/cupsd should be mode 0755 (bug #546004).
+
+* Fri Dec 03 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.5-4
+- Changed subsystem lock file name in initscript
+  so the service is correctly stopped on reboot or halt (bug #659391).
+
+* Fri Nov 26 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.5-3
+- BuildRequires python-cups instead of pycups.
+
+* Fri Nov 26 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.5-2
+- Added /etc/tmpfiles.d/cups.conf to enable /var/run/cups directory on tmpfs (#656566).
+
+* Fri Nov 12 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.5-1
+- 1.4.5.
+- No longer need CVE-2010-2941, str3608
+
+* Thu Nov 11 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.4-12
 - Applied patch to fix cupsd memory corruption vulnerability
-  (CVE-2010-2941, STR #3648, bug #624438).
+  (CVE-2010-2941, bug #652161).
+- Don't crash when MIME database could not be loaded (bug #610088).
 
-* Fri Jul 16 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.2-35
-- Set org.cups.sid form variable in choose-device template (bug #615269).
+* Wed Sep 29 2010 jkeating - 1:1.4.4-11
+- Rebuilt for gcc bug 634757
 
-* Wed Jul 14 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.2-34
-- Don't set domain= for cookies (bug #613618).
+* Fri Sep 17 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.4-10
+- Perform locking for gnutls and avoid libgcrypt's broken
+  locking (bug #607159).
+- Build with --enable-threads again (bug #607159).
+- Force the use of gnutls despite thread-safety concerns (bug #607159).
 
-* Thu Jun 24 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.2-33
-- Fix latent privilege escalation vulnerability (STR #3510,
-  bug #604728, CVE-2010-2431).
+* Wed Sep 15 2010 Tim Waugh <twaugh@redhat.com>
+- Fixed serverbin-compat patch to avoid misleading "filter not
+  available" messages (bug #633779).
 
-* Wed Jun 23 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.2-32
-- Prevent infinite loop via HTTP_UNAUTHORIZED responses (STR #3518,
-  bug #607211, CVE-2010-2432).
+* Mon Aug 23 2010 Tim Waugh <twaugh@redhat.com>
+- Fixed SNMP quirks parsing.
 
-* Wed Jun 16 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.2-31
-- Applied patch for CVE-2010-1748 (web interface memory disclosure,
-  STR #3577, bug #591983).
-- Applied patch for CVE-2010-0542 (texttops unchecked memory
-  allocation failure leading to NULL pointer dereference, STR #3516,
-  bug #587746).
-- Applied patch for CVE-2010-0540 (web interface CSRF, STR #2398),
-  including cancel-RSS fix (bug #588805).
+* Fri Aug 20 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.4-9
+- Use better upstream fix for STR #3608 (bug #606909).
 
-* Thu Jun 10 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.2-30
-- Use numeric addresses for interfaces unless HostNameLookups are
-  turned on (bug #590632).
+* Fri Aug 13 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.4-8
+- Specify udevadm trigger action in initscript (bug #623959).
 
-* Wed Jun  9 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.2-29
+* Tue Aug  3 2010 Tim Waugh <twaugh@redhat.com>
+- Merged F-12 change:
+  - Use numeric addresses for interfaces unless HostNameLookups are
+    turned on (bug #583054).
+
+* Tue Jul 13 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.4-7
+- Added restartlog to initscript usage output (bug #612996).
+
+* Mon Jul 12 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.4-6
+- Moved LICENSE.txt to libs sub-package.
+
+* Mon Jun 28 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.4-5
+- Avoid empty notify-subscribed-event attributes (bug #606909,
+  STR #3608).
+
+* Thu Jun 24 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.4-4
+- Use gnutls again but disable threading (bug #607159).
+
+* Tue Jun 22 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.4-3
+- Rebuilt to keep correct package n-v-r ordering between releases.
+
+* Fri Jun 18 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.4-2
+- Re-enabled SSL support by using OpenSSL instead of gnutls.
+
+* Fri Jun 18 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.4-1
+- 1.4.4.  Fixes several security vulnerabilities (bug #605399):
+  CVE-2010-0540, CVE-2010-0542, CVE-2010-1748.  No longer need str3503,
+  str3399, str3505, str3541, str3425p2 or CVE-2010-0302 patches.
+
+* Thu Jun 10 2010 Tim Waugh <twaugh@redhat.com>
+- Removed unapplied gnutls-gcrypt-threads patch.  Fixed typos in
+  descriptions for lpd and php sub-packages.
+
+* Wed Jun  9 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.3-11
 - Use upstream method of handling SNMP quirks in PPDs (STR #3551,
-  bug #580604).
+  bug #581825).
 
-* Wed Jun  9 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.2-28
-- Set PATH_INFO and AUTH_TYPE CGI variables (STR #3599, STR #3600,
-  bug #520849).
+* Tue Jun 01 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.3-10
+- Added back still useful str3425.patch.
+  Second part of STR #3425 is still not fixed in 1.4.3
 
-* Tue Jun  8 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.2-27
+* Tue May 18 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.3-9
 - Adjust texttops output to be in natural orientation (STR #3563).
   This fixes page-label orientation when texttops is used in the
-  filter chain (bug #593368).
+  filter chain (bug #572338).
 
-* Mon Apr 19 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-26
-- Fixed str3541.patch (bug #578424, STR #3541).
+* Thu May 13 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.3-8
+- Fixed Ricoh Device ID OID (STR #3552).
 
-* Tue Apr 13 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.2-25
-- Fixed handling of large SNMP value lengths from upstream commit 8941
-  (bug #581931).
+* Tue May 11 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.3-7
+- Add an SNMP query for Ricoh's device ID OID (STR #3552).
+
+* Fri Apr 16 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.3-6
+- Mark DNS-SD Device IDs that have been guessed at with "FZY:1;".
+
+* Fri Apr 16 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.3-5
+- Fixed str3541.patch
+
+* Tue Apr 13 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.3-4
 - Add an SNMP query for HP's device ID OID (STR #3552).
 
-* Tue Apr 13 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.2-24
-- Handle SNMP supply level quirks (bug #580604).
+* Tue Apr 13 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.3-3
+- Handle SNMP supply level quirks (bug #581825).
 
-* Mon Apr 12 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-23
-- The lpstat command did not limit the job list
-  to the specified printers (bug #578424, STR #3541).
+* Wed Mar 31 2010 Tim Waugh <twaugh@redhat.com> 1:1.4.3-2
+- Another BrowsePoll fix: handle EAI_NODATA as well (bug #567353).
 
-* Wed Mar 31 2010 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-22
-- Another BrowsePoll fix: handle EAI_NODATA as well (bug #567589).
+* Wed Mar 31 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.3-1
+- 1.4.3.
+- No longer need CVE-2009-3553, str3381, str3390, str3391,
+  str3403, str3407, str3413, str3418, str3422, str3425,
+  str3428, str3431, str3435, str3436, str3439, str3440,
+  str3442, str3448, str3458, str3460, cups-sidechannel-intrs,
+  negative-snmp-string-length, cups-media-empty-warning patches.
 
-* Wed Mar 10 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-21
-- Fixed patch for STR #3425 again to correctly
-  remove job info files in /var/spool/cups (bug #571860).
+* Tue Mar 30 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-36
+- Fixed lpstat to adhere to -o option (bug #577901, STR #3541).
 
-* Wed Mar  3 2010 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-20
+* Wed Mar 10 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-35
+- Fixed (for the third time) patch for STR #3425 to correctly
+  remove job info files in /var/spool/cups (bug #571830).
+
+* Fri Mar  5 2010 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-34
 - Applied patch for CVE-2010-0302 (incomplete fix for CVE-2009-3553,
   bug #557775).
+- Added comments for all sources and patches.
 
-* Wed Mar  3 2010 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-19
-- Update classes.conf when a class member printer is deleted
-  (bug #569903, STR #3505).
+* Tue Mar  2 2010 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-33
+- Don't own filesystem locale directories (bug #569403).
+- Don't apply gcrypt threading patch (bug #553834).
+- Don't treat SIGPIPE as an error (bug #569770).
 
-* Tue Mar  2 2010 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-18
-- Don't apply gcrypt threading patch (bug #569802).
-- Don't treat SIGPIPE as an error (bug #569777).
+* Wed Feb 24 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-32
 - Fixed cupsGetNamedDest() so it falls back to the real default
-  printer when a default from configuration file does not exist
-  (bug #569500, STR #3503).
-- Added comments for all patches and sources.
+  printer when a default from configuration file does not exist (bug #565569, STR #3503).
+
+* Tue Feb 23 2010 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-31
+- Update classes.conf when a class member printer is deleted
+  (bug #565878, STR #3505).
+
+* Tue Feb 23 2010 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-30
+- Re-initialize the resolver if getnameinfo() returns EAI_AGAIN
+  (bug #567353).
+
+* Mon Feb 15 2010 Jiri Popelka <jpopelka@redhat.com> 1:1.4.2-29
+- Improve cups-gnutls-gcrypt-threads.patch (#564841, STR #3461).
+
+* Thu Feb  4 2010 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-28
+- Rebuild for postscriptdriver tags.
+
+* Fri Jan 22 2010 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-27
+- Make sure we have some filters for converting to raster format.
+
+* Fri Jan 15 2010 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-26
+- Reset status after successful ipp job (bug #548219, STR #3460).
+
+* Thu Jan 14 2010 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-24
+- Install udev rules in correct place (bug #530378).
+- Don't mark initscript as config file.
+
+* Wed Jan 13 2010 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-23
+- Use %%{_initddir}, %%{_sysconfdir} and SMP make flags.
+- Use mode 0755 for binaries and libraries where appropriate.
+- Fix lpd obsoletes tag.
+
+* Thu Dec 24 2009 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-22
 - Removed use of prereq and buildprereq.
 - Fixed use of '%%' in changelog.
 - Versioned explicit obsoletes/provides.
 - Use tabs throughout.
 
-* Thu Feb 25 2010 Jiri Popelka <jpopelka@redhat.com> - 1:1.4.2-17
-- Reset status after successful ipp job (bug #555732, STR #3460).
-- Remove wait_bc call on most platforms (bug #562782, STR #3495).
-- Re-initialize the resolver if getnameinfo() returns EAI_AGAIN (bug #567589).
+* Wed Dec 23 2009 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-21
+- Fixed patch for STR #3425 again by adding in back-ported change from
+  svn revision 8929 (bug #549899).  No longer need
+  delete-active-printer patch.
 
-* Wed Jan 13 2010 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-16
-- Rebuild against new libaudit.
-
-* Thu Dec 24 2009 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-15
+* Tue Dec 22 2009 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-20
 - Fixed ipp authentication for servers requiring authentication for
-  IPP-Get-Printer-Attributes (bug #549785, STR #3458).
-- Fixed invalid read in cupsAddDest (bug #550301, STR #3448).
+  IPP-Get-Printer-Attributes (bug #548873, STR #3458).
+
+* Mon Dec 21 2009 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-19
 - Ensure proper thread-safety in gnutls's use of libgcrypt
-  (bug #550302).
+  (bug #544619).
+
+* Sat Dec 19 2009 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-18
 - Fixed patch for STR #3425 by adding in back-ported change from svn
-  revisions 8929 and 8936 (bug #548906, bug #550037).
+  revision 8936 (bug #548904).
+
+* Thu Dec 10 2009 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-17
+- Fixed invalid read in cupsAddDest (bug #537460).
+
+* Wed Dec  9 2009 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-15
+- Use upstream patch to fix scheduler crash when an active printer was
+  deleted (rev 8914).
 
 * Tue Dec  8 2009 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-14
 - The scheduler did not use the Get-Job-Attributes policy for a
@@ -1229,15 +1619,13 @@ rm -rf $RPM_BUILD_ROOT
   (bug #533426, STR #3439).
 - No longer requires paps.  The texttopaps filter MIME conversion file
   is now provided by the paps package (bug #545036).
-
-* Tue Dec  8 2009 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-13
 - Moved %%{_datadir}/cups/ppdc/*.h to the main package (bug #545348).
 
-* Fri Dec  4 2009 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-12
+* Fri Dec  4 2009 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-13
 - The web interface prevented conflicting options from being adjusted
   (bug #533426, STR #3439).
 
-* Thu Dec  3 2009 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-11
+* Thu Dec  3 2009 Tim Waugh <twaugh@redhat.com> - 1:1.4.2-12
 - Fixes for SNMP scanning with Lexmark printers (bug #542857, STR #3413).
 
 * Mon Nov 23 2009 Tim Waugh <twaugh@redhat.com> 1:1.4.2-10
@@ -1277,21 +1665,25 @@ rm -rf $RPM_BUILD_ROOT
 - Removed postscript.ppd.gz (bug #533371).
 - Renumbered patches and sources.
 
-* Tue Nov  3 2009 Tim Waugh <twaugh@redhat.com> 1:1.4.1-13
+* Tue Nov  3 2009 Tim Waugh <twaugh@redhat.com> 1:1.4.1-14
 - Removed stale patch from STR #2831 which was causing problems with
   number-up (bug #532516).
 
-* Tue Oct 27 2009 Jiri Popelka <jpopelka@redhat.com> 1:1.4.1-12
+* Tue Oct 27 2009 Jiri Popelka <jpopelka@redhat.com> 1:1.4.1-13
 - Fix incorrectly applied patch from #STR3285 (bug #531108).
 - Set the PRINTER_IS_SHARED variable for admin.cgi (bug #529634, #STR3390).
 - Pass through serial parameters correctly in web interface (bug #529635, #STR3391).
 - Fixed German translation (bug #531144, #STR3396).
 
-* Tue Oct 20 2009 Jiri Popelka <jpopelka@redhat.com> 1:1.4.1-11
+* Tue Oct 20 2009 Jiri Popelka <jpopelka@redhat.com> 1:1.4.1-12
 - Fix cups-lpd to create unique temporary data files (bug #529838).
 
-* Mon Oct 19 2009 Tim Waugh <twaugh@redhat.com> 1:1.4.1-10
+* Mon Oct 19 2009 Tim Waugh <twaugh@redhat.com> 1:1.4.1-11
 - Fixed German translation (bug #529575, STR #3380).
+
+* Thu Oct 15 2009 Tim Waugh <twaugh@redhat.com> 1:1.4.1-10
+- Don't ship pstoraster -- it is now provided by the ghostscript-cups
+  package.
 
 * Thu Oct  8 2009 Tim Waugh <twaugh@redhat.com> 1:1.4.1-9
 - Fixed naming of 'Generic PostScript Printer' entry.

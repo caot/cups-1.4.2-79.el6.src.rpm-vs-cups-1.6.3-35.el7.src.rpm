@@ -1,6 +1,6 @@
-diff -up cups-1.7.5/cgi-bin/admin.c.str4475 cups-1.7.5/cgi-bin/admin.c
---- cups-1.7.5/cgi-bin/admin.c.str4475	2014-09-01 13:03:51.295152124 +0100
-+++ cups-1.7.5/cgi-bin/admin.c	2014-09-01 13:03:59.367197078 +0100
+diff -up cups-1.6.3/cgi-bin/admin.c.str4475 cups-1.6.3/cgi-bin/admin.c
+--- cups-1.6.3/cgi-bin/admin.c.str4475	2014-09-02 12:09:43.875462488 +0100
++++ cups-1.6.3/cgi-bin/admin.c	2014-09-02 12:09:48.883487972 +0100
 @@ -1917,7 +1917,7 @@ do_config_server(http_t *http)		/* I - H
      }
      else
@@ -10,9 +10,9 @@ diff -up cups-1.7.5/cgi-bin/admin.c.str4475 cups-1.7.5/cgi-bin/admin.c
  
        cgiStartHTML(cgiText(_("Edit Configuration File")));
        cgiCopyTemplateLang("restart.tmpl");
-diff -up cups-1.7.5/templates/restart.tmpl.str4475 cups-1.7.5/templates/restart.tmpl
---- cups-1.7.5/templates/restart.tmpl.str4475	2008-10-08 23:50:16.000000000 +0100
-+++ cups-1.7.5/templates/restart.tmpl	2014-09-01 13:03:59.368197084 +0100
+diff -up cups-1.6.3/templates/restart.tmpl.str4475 cups-1.6.3/templates/restart.tmpl
+--- cups-1.6.3/templates/restart.tmpl.str4475	2008-10-08 23:50:16.000000000 +0100
++++ cups-1.6.3/templates/restart.tmpl	2014-09-02 12:09:48.883487972 +0100
 @@ -2,7 +2,7 @@
  
  <H2 CLASS="title">Change Settings</H2>
