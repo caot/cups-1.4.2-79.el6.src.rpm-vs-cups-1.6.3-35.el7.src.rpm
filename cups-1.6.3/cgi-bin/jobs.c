@@ -1,9 +1,9 @@
 /*
- * "$Id: jobs.c 8859 2009-11-09 23:01:17Z mike $"
+ * "$Id: jobs.c 7237 2008-01-22 01:38:39Z mike $"
  *
- *   Job status CGI for the Common UNIX Printing System (CUPS).
+ *   Job status CGI for CUPS.
  *
- *   Copyright 2007-2008 by Apple Inc.
+ *   Copyright 2007-2012 by Apple Inc.
  *   Copyright 1997-2006 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -195,7 +195,7 @@ do_job_op(http_t      *http,		/* I - HTTP connection */
   cgiStartHTML(cgiText(_("Jobs")));
 
   if (cupsLastError() > IPP_OK_CONFLICT)
-    cgiShowIPPError(_("Job operation failed:"));
+    cgiShowIPPError(_("Job operation failed"));
   else if (op == IPP_CANCEL_JOB)
     cgiCopyTemplateLang("job-cancel.tmpl");
   else if (op == IPP_HOLD_JOB)
@@ -210,5 +210,5 @@ do_job_op(http_t      *http,		/* I - HTTP connection */
 
 
 /*
- * End of "$Id: jobs.c 8859 2009-11-09 23:01:17Z mike $".
+ * End of "$Id: jobs.c 7237 2008-01-22 01:38:39Z mike $".
  */

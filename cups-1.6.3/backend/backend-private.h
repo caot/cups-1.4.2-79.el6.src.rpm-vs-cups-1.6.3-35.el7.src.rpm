@@ -1,9 +1,9 @@
 /*
- * "$Id: backend-private.h 8807 2009-08-31 18:45:43Z mike $"
+ * "$Id: backend-private.h 7810 2008-07-29 01:11:15Z mike $"
  *
- *   Backend support definitions for the Common UNIX Printing System (CUPS).
+ *   Backend support definitions for CUPS.
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2012 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -23,16 +23,31 @@
  * Include necessary headers.
  */
 
+#  include <cups/cups-private.h>
+#  include <cups/snmp-private.h>
 #  include <cups/backend.h>
 #  include <cups/sidechannel.h>
-#  include <cups/ppd-private.h>
-#  include <cups/debug.h>
-#  include <cups/i18n.h>
-#  include <cups/snmp-private.h>
-#  include <stdlib.h>
-#  include <errno.h>
-#  include <cups/string.h>
 #  include <signal.h>
+
+#  ifdef __linux
+#    include <sys/ioctl.h>
+#    include <linux/lp.h>
+#    define IOCNR_GET_DEVICE_ID		1
+#    define LPIOC_GET_DEVICE_ID(len)	_IOC(_IOC_READ, 'P', IOCNR_GET_DEVICE_ID, len)
+#    include <linux/parport.h>
+#    include <linux/ppdev.h>
+#    include <unistd.h>
+#    include <fcntl.h>
+#  endif /* __linux */
+
+#  ifdef __sun
+#    ifdef __sparc
+#      include <sys/ecppio.h>
+#    else
+#      include <sys/ioccom.h>
+#      include <sys/ecppsys.h>
+#    endif /* __sparc */
+#  endif /* __sun */
 
 
 /*
@@ -244,6 +259,20 @@ extern "C" {
 #define CUPS_TC_inserts				33
 #define CUPS_TC_covers				34
 
+#define CUPS_TC_tenThousandthsOfInches		3
+#define CUPS_TC_micrometers			4
+#define CUPS_TC_impressions			7
+#define CUPS_TC_sheets				8
+#define CUPS_TC_hours				11
+#define CUPS_TC_thousandthsOfOunces		12
+#define CUPS_TC_tenthsOfGrams			13
+#define CUPS_TC_hundrethsOfFluidOunces		14
+#define CUPS_TC_tenthsOfMilliliters		15
+#define CUPS_TC_feet				16
+#define CUPS_TC_meters				17
+#define CUPS_TC_items				18
+#define CUPS_TC_percent				19
+
 /* These come from RFC 3808 to define character sets we support */
 /* Also see http://www.iana.org/assignments/character-sets */
 #define CUPS_TC_csASCII				3
@@ -259,6 +288,15 @@ extern "C" {
 #define CUPS_TC_csUTF32				1017
 #define CUPS_TC_csUTF32BE			1018
 #define CUPS_TC_csUTF32LE			1019
+#define CUPS_TC_csWindows31J			2024
+
+
+/*
+ * Types...
+ */
+
+typedef int (*_cups_sccb_t)(int print_fd, int device_fd, int snmp_fd,
+			    http_addr_t *addr, int use_bc);
 
 
 /*
@@ -281,14 +319,13 @@ extern int		backendNetworkSideCB(int print_fd, int device_fd,
 					     int use_bc);
 extern ssize_t		backendRunLoop(int print_fd, int device_fd, int snmp_fd,
 			               http_addr_t *addr, int use_bc,
-				       int (*side_cb)(int print_fd,
-				                      int device_fd,
-						      int snmp_fd,
-						      http_addr_t *addr,
-						      int use_bc));
+			               int update_state, _cups_sccb_t side_cb);
 extern int		backendSNMPSupplies(int snmp_fd, http_addr_t *addr,
 			                    int *page_count,
 					    int *printer_state);
+extern int		backendWaitLoop(int snmp_fd, http_addr_t *addr,
+			                int use_bc, _cups_sccb_t side_cb);
+
 
 #  ifdef __cplusplus
 }
@@ -297,5 +334,5 @@ extern int		backendSNMPSupplies(int snmp_fd, http_addr_t *addr,
 
 
 /*
- * End of "$Id: backend-private.h 8807 2009-08-31 18:45:43Z mike $".
+ * End of "$Id: backend-private.h 7810 2008-07-29 01:11:15Z mike $".
  */

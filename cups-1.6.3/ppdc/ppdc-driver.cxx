@@ -1,9 +1,9 @@
 //
-// "$Id: ppdc-driver.cxx 8801 2009-08-29 06:05:14Z mike $"
+// "$Id: ppdc-driver.cxx 4185 2013-02-20 02:19:13Z msweet $"
 //
 //   PPD file compiler definitions for the CUPS PPD Compiler.
 //
-//   Copyright 2007-2009 by Apple Inc.
+//   Copyright 2007-2011 by Apple Inc.
 //   Copyright 2002-2006 by Easy Software Products.
 //
 //   These coded instructions, statements, and computer programs are the
@@ -36,7 +36,6 @@
 //
 
 #include "ppdc-private.h"
-#include <cups/globals.h>
 
 
 //
@@ -209,7 +208,7 @@ ppdcDriver::find_group(const char *n)	// I - Group name
 
 
   for (g = (ppdcGroup *)groups->first(); g; g = (ppdcGroup *)groups->next())
-    if (!strcasecmp(n, g->name->value))
+    if (!_cups_strcasecmp(n, g->name->value))
       return (g);
 
   return (0);
@@ -242,7 +241,7 @@ ppdcDriver::find_option_group(
 
   for (g = (ppdcGroup *)groups->first(); g; g = (ppdcGroup *)groups->next())
     for (o = (ppdcOption *)g->options->first(); o; o = (ppdcOption *)g->options->next())
-      if (!strcasecmp(n, o->name->value))
+      if (!_cups_strcasecmp(n, o->name->value))
       {
         if (mg)
 	  *mg = g;
@@ -476,7 +475,7 @@ ppdcDriver::write_ppd_file(
   if ((a = find_attr("ModelName", NULL)) != NULL)
     cupsFilePrintf(fp, "*ModelName: \"%s\"%s",
         	   catalog->find_message(a->value->value), lf);
-  else if (strncasecmp(model_name->value, manufacturer->value,
+  else if (_cups_strncasecmp(model_name->value, manufacturer->value,
                        strlen(manufacturer->value)))
     cupsFilePrintf(fp, "*ModelName: \"%s %s\"%s",
         	   catalog->find_message(manufacturer->value),
@@ -488,7 +487,7 @@ ppdcDriver::write_ppd_file(
   if ((a = find_attr("ShortNickName", NULL)) != NULL)
     cupsFilePrintf(fp, "*ShortNickName: \"%s\"%s",
         	   catalog->find_message(a->value->value), lf);
-  else if (strncasecmp(model_name->value, manufacturer->value,
+  else if (_cups_strncasecmp(model_name->value, manufacturer->value,
                        strlen(manufacturer->value)))
     cupsFilePrintf(fp, "*ShortNickName: \"%s %s\"%s",
         	   catalog->find_message(manufacturer->value),
@@ -500,7 +499,7 @@ ppdcDriver::write_ppd_file(
   if ((a = find_attr("NickName", NULL)) != NULL)
     cupsFilePrintf(fp, "*NickName: \"%s\"%s",
         	   catalog->find_message(a->value->value), lf);
-  else if (strncasecmp(model_name->value, manufacturer->value,
+  else if (_cups_strncasecmp(model_name->value, manufacturer->value,
                        strlen(manufacturer->value)))
     cupsFilePrintf(fp, "*NickName: \"%s %s, %s\"%s",
         	   catalog->find_message(manufacturer->value),
@@ -690,7 +689,7 @@ ppdcDriver::write_ppd_file(
       for (int i = 0; i < 9; i ++)
 	_cupsStrFormatd(profile[i], profile[i] + sizeof(profile[0]),
 	                p->profile[i], loc);
-      
+
       cupsFilePrintf(fp,
                      "*cupsColorProfile %s/%s: \"%s %s %s %s %s %s %s %s %s %s "
 		     "%s\"%s", p->resolution->value, p->media_type->value,
@@ -729,7 +728,7 @@ ppdcDriver::write_ppd_file(
 	  // No, skip this one...
           _cupsLangPrintf(stderr,
 	                  _("ppdc: No message catalog provided for locale "
-			    "%s!\n"), locale->value);
+			    "%s."), locale->value);
           continue;
 	}
 
@@ -1015,7 +1014,7 @@ ppdcDriver::write_ppd_file(
     if (!g->options->count)
       continue;
 
-    if (strcasecmp(g->name->value, "General"))
+    if (_cups_strcasecmp(g->name->value, "General"))
       cupsFilePrintf(fp, "*OpenGroup: %s/%s%s", g->name->value,
                      catalog->find_message(g->text->value), lf);
 
@@ -1026,7 +1025,16 @@ ppdcDriver::write_ppd_file(
       if (!o->choices->count)
         continue;
 
-      if (!o->text->value || !strcmp(o->name->value, o->text->value))
+      if (o->section == PPDC_SECTION_JCL)
+      {
+	if (!o->text->value)
+	  cupsFilePrintf(fp, "*JCLOpenUI *%s/%s: ", o->name->value,
+			 catalog->find_message(o->name->value));
+	else
+	  cupsFilePrintf(fp, "*JCLOpenUI *%s/%s: ", o->name->value,
+			 catalog->find_message(o->text->value));
+      }
+      else if (!o->text->value)
 	cupsFilePrintf(fp, "*OpenUI *%s/%s: ", o->name->value,
 	               catalog->find_message(o->name->value));
       else
@@ -1093,9 +1101,9 @@ ppdcDriver::write_ppd_file(
 	   c = (ppdcChoice *)o->choices->next())
       {
         // Write this choice...
-	if (!c->text->value || !strcmp(c->name->value, c->text->value))
-          cupsFilePrintf(fp, "*%s %s: \"%s\"%s", o->name->value,
-	                 catalog->find_message(c->name->value),
+	if (!c->text->value)
+          cupsFilePrintf(fp, "*%s %s/%s: \"%s\"%s", o->name->value,
+                         c->name->value, catalog->find_message(c->name->value),
 	        	 c->code->value, lf);
         else
           cupsFilePrintf(fp, "*%s %s/%s: \"%s\"%s", o->name->value,
@@ -1138,17 +1146,18 @@ ppdcDriver::write_ppd_file(
 	  if (!a->selector->value || !a->selector->value[0])
 	    cupsFilePrintf(fp, "*%s", a->name->value);
 	  else if (!a->text->value || !a->text->value[0])
-	    cupsFilePrintf(fp, "*%s %s", a->name->value, a->selector->value);
+	    cupsFilePrintf(fp, "*%s %s/%s", a->name->value, a->selector->value,
+	                   catalog->find_message(a->selector->value));
 	  else
 	    cupsFilePrintf(fp, "*%s %s/%s", a->name->value, a->selector->value,
-			   a->text->value);
+			   catalog->find_message(a->text->value));
 
           cupsFilePrintf(fp, ": %s%s", a->value->value, lf);
 	}
       }
     }
 
-    if (strcasecmp(g->name->value, "General"))
+    if (_cups_strcasecmp(g->name->value, "General"))
       cupsFilePrintf(fp, "*CloseGroup: %s%s", g->name->value, lf);
   }
 
@@ -1181,7 +1190,7 @@ ppdcDriver::write_ppd_file(
 	cupsFilePrintf(fp, "*%s.Translation ModelName/%s: \"\"%s",
                        locale->value,
         	       locatalog->find_message(a->value->value), lf);
-      else if (strncasecmp(model_name->value, manufacturer->value,
+      else if (_cups_strncasecmp(model_name->value, manufacturer->value,
                 	   strlen(manufacturer->value)))
 	cupsFilePrintf(fp, "*%s.Translation ModelName/%s %s: \"\"%s",
                        locale->value,
@@ -1196,7 +1205,7 @@ ppdcDriver::write_ppd_file(
 	cupsFilePrintf(fp, "*%s.Translation ShortNickName/%s: \"\"%s",
                        locale->value,
         	       locatalog->find_message(a->value->value), lf);
-      else if (strncasecmp(model_name->value, manufacturer->value,
+      else if (_cups_strncasecmp(model_name->value, manufacturer->value,
                 	   strlen(manufacturer->value)))
 	cupsFilePrintf(fp, "*%s.Translation ShortNickName/%s %s: \"\"%s",
                        locale->value,
@@ -1211,7 +1220,7 @@ ppdcDriver::write_ppd_file(
 	cupsFilePrintf(fp, "*%s.Translation NickName/%s: \"\"%s",
                        locale->value,
         	       locatalog->find_message(a->value->value), lf);
-      else if (strncasecmp(model_name->value, manufacturer->value,
+      else if (_cups_strncasecmp(model_name->value, manufacturer->value,
                 	   strlen(manufacturer->value)))
 	cupsFilePrintf(fp, "*%s.Translation NickName/%s %s, %s: \"\"%s",
                        locale->value,
@@ -1243,7 +1252,7 @@ ppdcDriver::write_ppd_file(
 	if (!g->options->count)
 	  continue;
 
-	if (strcasecmp(g->name->value, "General"))
+	if (_cups_strcasecmp(g->name->value, "General"))
 	  cupsFilePrintf(fp, "*%s.Translation %s/%s: \"\"%s", locale->value,
 	                 g->name->value,
                 	 locatalog->find_message(g->text->value), lf);
@@ -1278,12 +1287,8 @@ ppdcDriver::write_ppd_file(
       // Finally the localizable attributes...
       for (a = (ppdcAttr *)attrs->first(); a; a = (ppdcAttr *)attrs->next())
       {
-        if ((!a->text || !a->text->value || !a->text->value[0]) &&
-	    strncmp(a->name->value, "Custom", 6) &&
-	    strncmp(a->name->value, "ParamCustom", 11))
-	  continue;
-
         if (!a->localizable &&
+	    (!a->text || !a->text->value || !a->text->value[0]) &&
 	    strcmp(a->name->value, "APCustomColorMatchingName") &&
 	    strcmp(a->name->value, "APPrinterPreset") &&
 	    strcmp(a->name->value, "cupsICCProfile") &&
@@ -1291,7 +1296,7 @@ ppdcDriver::write_ppd_file(
 	    strcmp(a->name->value, "cupsMarkerName") &&
 	    strncmp(a->name->value, "Custom", 6) &&
 	    strncmp(a->name->value, "ParamCustom", 11))
-          continue;
+	  continue;
 
         cupsFilePrintf(fp, "*%s.%s %s/%s: \"%s\"%s", locale->value,
 	               a->name->value, a->selector->value,
@@ -1339,5 +1344,5 @@ ppdcDriver::write_ppd_file(
 
 
 //
-// End of "$Id: ppdc-driver.cxx 8801 2009-08-29 06:05:14Z mike $".
+// End of "$Id: ppdc-driver.cxx 4185 2013-02-20 02:19:13Z msweet $".
 //

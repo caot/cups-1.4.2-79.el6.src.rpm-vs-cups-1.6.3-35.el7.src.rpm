@@ -1,9 +1,9 @@
 /*
- * "$Id: testipp.c 8234 2009-01-12 23:50:35Z mike $"
+ * "$Id: testipp.c 6649 2007-07-11 21:46:42Z mike $"
  *
- *   IPP test program for the Common UNIX Printing System (CUPS).
+ *   IPP test program for CUPS.
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2012 by Apple Inc.
  *   Copyright 1997-2005 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -16,17 +16,19 @@
  *
  * Contents:
  *
- *   main() - Main entry.
+ *   main()             - Main entry.
+ *   hex_dump()         - Produce a hex dump of a buffer.
+ *   print_attributes() - Print the attributes in a request...
+ *   read_cb()          - Read data from a buffer.
+ *   write_cb()         - Write data into a buffer.
  */
 
 /*
  * Include necessary headers...
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <cups/string.h>
-#include <errno.h>
+#include "file.h"
+#include "string-private.h"
 #include "ipp-private.h"
 #ifdef WIN32
 #  include <io.h>
@@ -37,95 +39,196 @@
 
 
 /*
+ * Local types...
+ */
+
+typedef struct _ippdata_t
+{
+  size_t	rpos,			/* Read position */
+		wused,			/* Bytes used */
+		wsize;			/* Max size of buffer */
+  ipp_uchar_t	*wbuffer;		/* Buffer */
+} _ippdata_t;
+
+
+/*
  * Local globals...
  */
 
-int		rpos;				/* Current position in buffer */
-ipp_uchar_t	wbuffer[8192];			/* Write buffer */
-int		wused;				/* Number of bytes in buffer */
-ipp_uchar_t	collection[] =			/* Collection buffer */
+ipp_uchar_t	collection[] =		/* Collection buffer */
 		{
-		  0x01, 0x01,			/* IPP version */
-		  0x00, 0x02,			/* Print-Job operation */
-		  0x00, 0x00, 0x00, 0x01,	/* Request ID */
+		  0x01, 0x01,		/* IPP version */
+		  0x00, 0x02,		/* Print-Job operation */
+		  0x00, 0x00, 0x00, 0x01,
+		  			/* Request ID */
 
 		  IPP_TAG_OPERATION,
 
 		  IPP_TAG_CHARSET,
-		  0x00, 0x12,			/* Name length + name */
+		  0x00, 0x12,		/* Name length + name */
 		  'a','t','t','r','i','b','u','t','e','s','-',
 		  'c','h','a','r','s','e','t',
-		  0x00, 0x05,			/* Value length + value */
+		  0x00, 0x05,		/* Value length + value */
 		  'u','t','f','-','8',
 
 		  IPP_TAG_LANGUAGE,
-		  0x00, 0x1b,			/* Name length + name */
+		  0x00, 0x1b,		/* Name length + name */
 		  'a','t','t','r','i','b','u','t','e','s','-',
 		  'n','a','t','u','r','a','l','-','l','a','n',
 		  'g','u','a','g','e',
-		  0x00, 0x02,			/* Value length + value */
+		  0x00, 0x02,		/* Value length + value */
 		  'e','n',
 
 		  IPP_TAG_URI,
-		  0x00, 0x0b,			/* Name length + name */
+		  0x00, 0x0b,		/* Name length + name */
 		  'p','r','i','n','t','e','r','-','u','r','i',
 		  0x00, 0x1c,			/* Value length + value */
 		  'i','p','p',':','/','/','l','o','c','a','l',
 		  'h','o','s','t','/','p','r','i','n','t','e',
 		  'r','s','/','f','o','o',
 
-		  IPP_TAG_JOB,			/* job group tag */
+		  IPP_TAG_JOB,		/* job group tag */
 
-		  IPP_TAG_BEGIN_COLLECTION,	/* begCollection tag */
-		  0x00, 0x09,			/* Name length + name */
+		  IPP_TAG_BEGIN_COLLECTION,
+		  			/* begCollection tag */
+		  0x00, 0x09,		/* Name length + name */
 		  'm', 'e', 'd', 'i', 'a', '-', 'c', 'o', 'l',
-		  0x00, 0x00,			/* No value */
-		    IPP_TAG_MEMBERNAME,		/* memberAttrName tag */
-		    0x00, 0x00,			/* No name */
-		    0x00, 0x0b,			/* Value length + value */
+		  0x00, 0x00,		/* No value */
+		    IPP_TAG_MEMBERNAME,	/* memberAttrName tag */
+		    0x00, 0x00,		/* No name */
+		    0x00, 0x0a,		/* Value length + value */
+		    'm', 'e', 'd', 'i', 'a', '-', 's', 'i', 'z', 'e',
+		    IPP_TAG_BEGIN_COLLECTION,
+		    			/* begCollection tag */
+		    0x00, 0x00,		/* Name length + name */
+		    0x00, 0x00,		/* No value */
+		      IPP_TAG_MEMBERNAME,
+		      			/* memberAttrName tag */
+		      0x00, 0x00,	/* No name */
+		      0x00, 0x0b,	/* Value length + value */
+		      'x', '-', 'd', 'i', 'm', 'e', 'n', 's', 'i', 'o', 'n',
+		      IPP_TAG_INTEGER,	/* integer tag */
+		      0x00, 0x00,	/* No name */
+		      0x00, 0x04,	/* Value length + value */
+		      0x00, 0x00, 0x54, 0x56,
+		      IPP_TAG_MEMBERNAME,
+		      			/* memberAttrName tag */
+		      0x00, 0x00,	/* No name */
+		      0x00, 0x0b,	/* Value length + value */
+		      'y', '-', 'd', 'i', 'm', 'e', 'n', 's', 'i', 'o', 'n',
+		      IPP_TAG_INTEGER,	/* integer tag */
+		      0x00, 0x00,	/* No name */
+		      0x00, 0x04,	/* Value length + value */
+		      0x00, 0x00, 0x6d, 0x24,
+		    IPP_TAG_END_COLLECTION,
+		    			/* endCollection tag */
+		    0x00, 0x00,		/* No name */
+		    0x00, 0x00,		/* No value */
+		    IPP_TAG_MEMBERNAME,	/* memberAttrName tag */
+		    0x00, 0x00,		/* No name */
+		    0x00, 0x0b,		/* Value length + value */
 		    'm', 'e', 'd', 'i', 'a', '-', 'c', 'o', 'l', 'o', 'r',
-		    IPP_TAG_KEYWORD,		/* keyword tag */
-		    0x00, 0x00,			/* No name */
-		    0x00, 0x04,			/* Value length + value */
+		    IPP_TAG_KEYWORD,	/* keyword tag */
+		    0x00, 0x00,		/* No name */
+		    0x00, 0x04,		/* Value length + value */
 		    'b', 'l', 'u', 'e',
 
-		    IPP_TAG_MEMBERNAME,		/* memberAttrName tag */
-		    0x00, 0x00,			/* No name */
-		    0x00, 0x0a,			/* Value length + value */
+		    IPP_TAG_MEMBERNAME,	/* memberAttrName tag */
+		    0x00, 0x00,		/* No name */
+		    0x00, 0x0a,		/* Value length + value */
 		    'm', 'e', 'd', 'i', 'a', '-', 't', 'y', 'p', 'e',
-		    IPP_TAG_KEYWORD,		/* keyword tag */
-		    0x00, 0x00,			/* No name */
-		    0x00, 0x05,			/* Value length + value */
+		    IPP_TAG_KEYWORD,	/* keyword tag */
+		    0x00, 0x00,		/* No name */
+		    0x00, 0x05,		/* Value length + value */
 		    'p', 'l', 'a', 'i', 'n',
-		  IPP_TAG_END_COLLECTION,	/* endCollection tag */
-		  0x00, 0x00,			/* No name */
-		  0x00, 0x00,			/* No value */
+		  IPP_TAG_END_COLLECTION,
+		  			/* endCollection tag */
+		  0x00, 0x00,		/* No name */
+		  0x00, 0x00,		/* No value */
 
-		  IPP_TAG_BEGIN_COLLECTION,	/* begCollection tag */
-		  0x00, 0x00,			/* No name */
-		  0x00, 0x00,			/* No value */
-		    IPP_TAG_MEMBERNAME,		/* memberAttrName tag */
-		    0x00, 0x00,			/* No name */
-		    0x00, 0x0b,			/* Value length + value */
+		  IPP_TAG_BEGIN_COLLECTION,
+		  			/* begCollection tag */
+		  0x00, 0x00,		/* No name */
+		  0x00, 0x00,		/* No value */
+		    IPP_TAG_MEMBERNAME,	/* memberAttrName tag */
+		    0x00, 0x00,		/* No name */
+		    0x00, 0x0a,		/* Value length + value */
+		    'm', 'e', 'd', 'i', 'a', '-', 's', 'i', 'z', 'e',
+		    IPP_TAG_BEGIN_COLLECTION,
+		    			/* begCollection tag */
+		    0x00, 0x00,		/* Name length + name */
+		    0x00, 0x00,		/* No value */
+		      IPP_TAG_MEMBERNAME,
+		      			/* memberAttrName tag */
+		      0x00, 0x00,	/* No name */
+		      0x00, 0x0b,	/* Value length + value */
+		      'x', '-', 'd', 'i', 'm', 'e', 'n', 's', 'i', 'o', 'n',
+		      IPP_TAG_INTEGER,	/* integer tag */
+		      0x00, 0x00,	/* No name */
+		      0x00, 0x04,	/* Value length + value */
+		      0x00, 0x00, 0x52, 0x08,
+		      IPP_TAG_MEMBERNAME,
+		      			/* memberAttrName tag */
+		      0x00, 0x00,	/* No name */
+		      0x00, 0x0b,	/* Value length + value */
+		      'y', '-', 'd', 'i', 'm', 'e', 'n', 's', 'i', 'o', 'n',
+		      IPP_TAG_INTEGER,	/* integer tag */
+		      0x00, 0x00,	/* No name */
+		      0x00, 0x04,	/* Value length + value */
+		      0x00, 0x00, 0x74, 0x04,
+		    IPP_TAG_END_COLLECTION,
+		    			/* endCollection tag */
+		    0x00, 0x00,		/* No name */
+		    0x00, 0x00,		/* No value */
+		    IPP_TAG_MEMBERNAME,	/* memberAttrName tag */
+		    0x00, 0x00,		/* No name */
+		    0x00, 0x0b,		/* Value length + value */
 		    'm', 'e', 'd', 'i', 'a', '-', 'c', 'o', 'l', 'o', 'r',
-		    IPP_TAG_KEYWORD,		/* keyword tag */
-		    0x00, 0x00,			/* No name */
-		    0x00, 0x05,			/* Value length + value */
+		    IPP_TAG_KEYWORD,	/* keyword tag */
+		    0x00, 0x00,		/* No name */
+		    0x00, 0x05,		/* Value length + value */
 		    'p', 'l', 'a', 'i', 'd',
 
-		    IPP_TAG_MEMBERNAME,		/* memberAttrName tag */
-		    0x00, 0x00,			/* No name */
-		    0x00, 0x0a,			/* Value length + value */
+		    IPP_TAG_MEMBERNAME,	/* memberAttrName tag */
+		    0x00, 0x00,		/* No name */
+		    0x00, 0x0a,		/* Value length + value */
 		    'm', 'e', 'd', 'i', 'a', '-', 't', 'y', 'p', 'e',
-		    IPP_TAG_KEYWORD,		/* keyword tag */
-		    0x00, 0x00,			/* No name */
-		    0x00, 0x06,			/* Value length + value */
+		    IPP_TAG_KEYWORD,	/* keyword tag */
+		    0x00, 0x00,		/* No name */
+		    0x00, 0x06,		/* Value length + value */
 		    'g', 'l', 'o', 's', 's', 'y',
-		  IPP_TAG_END_COLLECTION,	/* endCollection tag */
-		  0x00, 0x00,			/* No name */
-		  0x00, 0x00,			/* No value */
+		  IPP_TAG_END_COLLECTION,
+		  			/* endCollection tag */
+		  0x00, 0x00,		/* No name */
+		  0x00, 0x00,		/* No value */
 
-		  IPP_TAG_END			/* end tag */
+		  IPP_TAG_END		/* end tag */
+		};
+
+ipp_uchar_t	mixed[] =		/* Mixed value buffer */
+		{
+		  0x01, 0x01,		/* IPP version */
+		  0x00, 0x02,		/* Print-Job operation */
+		  0x00, 0x00, 0x00, 0x01,
+		  			/* Request ID */
+
+		  IPP_TAG_OPERATION,
+
+		  IPP_TAG_INTEGER,	/* integer tag */
+		  0x00, 0x1f,		/* Name length + name */
+		  'n', 'o', 't', 'i', 'f', 'y', '-', 'l', 'e', 'a', 's', 'e',
+		  '-', 'd', 'u', 'r', 'a', 't', 'i', 'o', 'n', '-', 's', 'u',
+		  'p', 'p', 'o', 'r', 't', 'e', 'd',
+		  0x00, 0x04,		/* Value length + value */
+		  0x00, 0x00, 0x00, 0x01,
+
+		  IPP_TAG_RANGE,	/* rangeOfInteger tag */
+		  0x00, 0x00,		/* No name */
+		  0x00, 0x08,		/* Value length + value */
+		  0x00, 0x00, 0x00, 0x10,
+		  0x00, 0x00, 0x00, 0x20,
+
+		  IPP_TAG_END		/* end tag */
 		};
 
 
@@ -135,8 +238,8 @@ ipp_uchar_t	collection[] =			/* Collection buffer */
 
 void	hex_dump(const char *title, ipp_uchar_t *buffer, int bytes);
 void	print_attributes(ipp_t *ipp, int indent);
-ssize_t	read_cb(void *data, ipp_uchar_t *buffer, size_t bytes);
-ssize_t	write_cb(void *data, ipp_uchar_t *buffer, size_t bytes);
+ssize_t	read_cb(_ippdata_t *data, ipp_uchar_t *buffer, size_t bytes);
+ssize_t	write_cb(_ippdata_t *data, ipp_uchar_t *buffer, size_t bytes);
 
 
 /*
@@ -147,11 +250,17 @@ int				/* O - Exit status */
 main(int  argc,			/* I - Number of command-line arguments */
      char *argv[])		/* I - Command-line arguments */
 {
-  ipp_t		*cols[2];	/* Collections */
+  _ippdata_t	data;		/* IPP buffer */
+  ipp_uchar_t	buffer[8192];	/* Write buffer data */
+  ipp_t		*cols[2],	/* Collections */
+		*size;		/* media-size collection */
   ipp_t		*request;	/* Request */
+  ipp_attribute_t *media_col,	/* media-col attribute */
+		*media_size,	/* media-size attribute */
+		*attr;		/* Other attribute */
   ipp_state_t	state;		/* State */
   int		length;		/* Length of data */
-  int		fd;		/* File descriptor */
+  cups_file_t	*fp;		/* File pointer */
   int		i;		/* Looping var */
   int		status;		/* Status of tests (0 = success, 1 = fail) */
 
@@ -180,14 +289,31 @@ main(int  argc,			/* I - Number of command-line arguments */
         	 "printer-uri", NULL, "ipp://localhost/printers/foo");
 
     cols[0] = ippNew();
-    ippAddString(cols[0], IPP_TAG_JOB, IPP_TAG_KEYWORD, "media-color", NULL, "blue");
-    ippAddString(cols[0], IPP_TAG_JOB, IPP_TAG_KEYWORD, "media-type", NULL, "plain");
+    size    = ippNew();
+    ippAddInteger(size, IPP_TAG_ZERO, IPP_TAG_INTEGER, "x-dimension", 21590);
+    ippAddInteger(size, IPP_TAG_ZERO, IPP_TAG_INTEGER, "y-dimension", 27940);
+    ippAddCollection(cols[0], IPP_TAG_JOB, "media-size", size);
+    ippDelete(size);
+    ippAddString(cols[0], IPP_TAG_JOB, IPP_TAG_KEYWORD, "media-color", NULL,
+                 "blue");
+    ippAddString(cols[0], IPP_TAG_JOB, IPP_TAG_KEYWORD, "media-type", NULL,
+                 "plain");
 
     cols[1] = ippNew();
-    ippAddString(cols[1], IPP_TAG_JOB, IPP_TAG_KEYWORD, "media-color", NULL, "plaid");
-    ippAddString(cols[1], IPP_TAG_JOB, IPP_TAG_KEYWORD, "media-type", NULL, "glossy");
+    size    = ippNew();
+    ippAddInteger(size, IPP_TAG_ZERO, IPP_TAG_INTEGER, "x-dimension", 21000);
+    ippAddInteger(size, IPP_TAG_ZERO, IPP_TAG_INTEGER, "y-dimension", 29700);
+    ippAddCollection(cols[1], IPP_TAG_JOB, "media-size", size);
+    ippDelete(size);
+    ippAddString(cols[1], IPP_TAG_JOB, IPP_TAG_KEYWORD, "media-color", NULL,
+                 "plaid");
+    ippAddString(cols[1], IPP_TAG_JOB, IPP_TAG_KEYWORD, "media-type", NULL,
+		 "glossy");
 
-    ippAddCollections(request, IPP_TAG_JOB, "media-col", 2, (const ipp_t **)cols);
+    ippAddCollections(request, IPP_TAG_JOB, "media-col", 2,
+                      (const ipp_t **)cols);
+    ippDelete(cols[0]);
+    ippDelete(cols[1]);
 
     length = ippLength(request);
     if (length != sizeof(collection))
@@ -205,28 +331,36 @@ main(int  argc,			/* I - Number of command-line arguments */
 
     printf("Write Sample to Memory: ");
 
-    wused = 0;
-    while ((state = ippWriteIO(wbuffer, write_cb, 1, NULL, request)) != IPP_DATA)
+    data.wused   = 0;
+    data.wsize   = sizeof(buffer);
+    data.wbuffer = buffer;
+
+    while ((state = ippWriteIO(&data, (ipp_iocb_t)write_cb, 1, NULL,
+                               request)) != IPP_DATA)
       if (state == IPP_ERROR)
 	break;
 
     if (state != IPP_DATA)
     {
-      printf("FAIL - %d bytes written.\n", wused);
+      printf("FAIL - %d bytes written.\n", (int)data.wused);
       status = 1;
     }
-    else if (wused != sizeof(collection))
+    else if (data.wused != sizeof(collection))
     {
-      printf("FAIL - wrote %d bytes, expected %d bytes!\n", wused,
+      printf("FAIL - wrote %d bytes, expected %d bytes!\n", (int)data.wused,
              (int)sizeof(collection));
-      hex_dump("Bytes Written", wbuffer, wused);
+      hex_dump("Bytes Written", data.wbuffer, data.wused);
       hex_dump("Baseline", collection, sizeof(collection));
       status = 1;
     }
-    else if (memcmp(wbuffer, collection, wused))
+    else if (memcmp(data.wbuffer, collection, data.wused))
     {
-      puts("FAIL - output does not match baseline!");
-      hex_dump("Bytes Written", wbuffer, wused);
+      for (i = 0; i < data.wused; i ++)
+        if (data.wbuffer[i] != collection[i])
+	  break;
+
+      printf("FAIL - output does not match baseline at 0x%04x!\n", i);
+      hex_dump("Bytes Written", data.wbuffer, data.wused);
       hex_dump("Baseline", collection, sizeof(collection));
       status = 1;
     }
@@ -241,10 +375,11 @@ main(int  argc,			/* I - Number of command-line arguments */
 
     printf("Read Sample from Memory: ");
 
-    request = ippNew();
-    rpos    = 0;
+    request     = ippNew();
+    data.rpos = 0;
 
-    while ((state = ippReadIO(wbuffer, read_cb, 1, NULL, request)) != IPP_DATA)
+    while ((state = ippReadIO(&data, (ipp_iocb_t)read_cb, 1, NULL,
+                              request)) != IPP_DATA)
       if (state == IPP_ERROR)
 	break;
 
@@ -252,12 +387,13 @@ main(int  argc,			/* I - Number of command-line arguments */
 
     if (state != IPP_DATA)
     {
-      printf("FAIL - %d bytes read.\n", rpos);
+      printf("FAIL - %d bytes read.\n", (int)data.rpos);
       status = 1;
     }
-    else if (rpos != wused)
+    else if (data.rpos != data.wused)
     {
-      printf("FAIL - read %d bytes, expected %d bytes!\n", rpos, wused);
+      printf("FAIL - read %d bytes, expected %d bytes!\n", (int)data.rpos,
+             (int)data.wused);
       print_attributes(request, 8);
       status = 1;
     }
@@ -271,13 +407,229 @@ main(int  argc,			/* I - Number of command-line arguments */
     else
       puts("PASS");
 
+    fputs("ippFindAttribute(media-col): ", stdout);
+    if ((media_col = ippFindAttribute(request, "media-col",
+                                      IPP_TAG_BEGIN_COLLECTION)) == NULL)
+    {
+      if ((media_col = ippFindAttribute(request, "media-col",
+                                        IPP_TAG_ZERO)) == NULL)
+        puts("FAIL (not found)");
+      else
+        printf("FAIL (wrong type - %s)\n", ippTagString(media_col->value_tag));
+
+      status = 1;
+    }
+    else if (media_col->num_values != 2)
+    {
+      printf("FAIL (wrong count - %d)\n", media_col->num_values);
+      status = 1;
+    }
+    else
+      puts("PASS");
+
+    if (media_col)
+    {
+      fputs("ippFindAttribute(media-size 1): ", stdout);
+      if ((media_size = ippFindAttribute(media_col->values[0].collection,
+					 "media-size",
+					 IPP_TAG_BEGIN_COLLECTION)) == NULL)
+      {
+	if ((media_size = ippFindAttribute(media_col->values[0].collection,
+					   "media-col",
+					   IPP_TAG_ZERO)) == NULL)
+	  puts("FAIL (not found)");
+	else
+	  printf("FAIL (wrong type - %s)\n",
+	         ippTagString(media_size->value_tag));
+
+	status = 1;
+      }
+      else
+      {
+	if ((attr = ippFindAttribute(media_size->values[0].collection,
+				     "x-dimension", IPP_TAG_INTEGER)) == NULL)
+	{
+	  if ((attr = ippFindAttribute(media_size->values[0].collection,
+				       "x-dimension", IPP_TAG_ZERO)) == NULL)
+	    puts("FAIL (missing x-dimension)");
+	  else
+	    printf("FAIL (wrong type for x-dimension - %s)\n",
+		   ippTagString(attr->value_tag));
+
+	  status = 1;
+	}
+	else if (attr->values[0].integer != 21590)
+	{
+	  printf("FAIL (wrong value for x-dimension - %d)\n",
+		 attr->values[0].integer);
+	  status = 1;
+	}
+	else if ((attr = ippFindAttribute(media_size->values[0].collection,
+					  "y-dimension",
+					  IPP_TAG_INTEGER)) == NULL)
+	{
+	  if ((attr = ippFindAttribute(media_size->values[0].collection,
+				       "y-dimension", IPP_TAG_ZERO)) == NULL)
+	    puts("FAIL (missing y-dimension)");
+	  else
+	    printf("FAIL (wrong type for y-dimension - %s)\n",
+		   ippTagString(attr->value_tag));
+
+	  status = 1;
+	}
+	else if (attr->values[0].integer != 27940)
+	{
+	  printf("FAIL (wrong value for y-dimension - %d)\n",
+		 attr->values[0].integer);
+	  status = 1;
+	}
+	else
+	  puts("PASS");
+      }
+
+      fputs("ippFindAttribute(media-size 2): ", stdout);
+      if ((media_size = ippFindAttribute(media_col->values[1].collection,
+					 "media-size",
+					 IPP_TAG_BEGIN_COLLECTION)) == NULL)
+      {
+	if ((media_size = ippFindAttribute(media_col->values[1].collection,
+					   "media-col",
+					   IPP_TAG_ZERO)) == NULL)
+	  puts("FAIL (not found)");
+	else
+	  printf("FAIL (wrong type - %s)\n",
+	         ippTagString(media_size->value_tag));
+
+	status = 1;
+      }
+      else
+      {
+	if ((attr = ippFindAttribute(media_size->values[0].collection,
+				     "x-dimension",
+				     IPP_TAG_INTEGER)) == NULL)
+	{
+	  if ((attr = ippFindAttribute(media_size->values[0].collection,
+				       "x-dimension", IPP_TAG_ZERO)) == NULL)
+	    puts("FAIL (missing x-dimension)");
+	  else
+	    printf("FAIL (wrong type for x-dimension - %s)\n",
+		   ippTagString(attr->value_tag));
+
+	  status = 1;
+	}
+	else if (attr->values[0].integer != 21000)
+	{
+	  printf("FAIL (wrong value for x-dimension - %d)\n",
+		 attr->values[0].integer);
+	  status = 1;
+	}
+	else if ((attr = ippFindAttribute(media_size->values[0].collection,
+					  "y-dimension",
+					  IPP_TAG_INTEGER)) == NULL)
+	{
+	  if ((attr = ippFindAttribute(media_size->values[0].collection,
+				       "y-dimension", IPP_TAG_ZERO)) == NULL)
+	    puts("FAIL (missing y-dimension)");
+	  else
+	    printf("FAIL (wrong type for y-dimension - %s)\n",
+		   ippTagString(attr->value_tag));
+
+	  status = 1;
+	}
+	else if (attr->values[0].integer != 29700)
+	{
+	  printf("FAIL (wrong value for y-dimension - %d)\n",
+		 attr->values[0].integer);
+	  status = 1;
+	}
+	else
+	  puts("PASS");
+      }
+    }
+
+    ippDelete(request);
+
+   /*
+    * Read the mixed data and confirm we converted everything to rangeOfInteger
+    * values...
+    */
+
+    printf("Read Mixed integer/rangeOfInteger from Memory: ");
+
+    request = ippNew();
+    data.rpos    = 0;
+    data.wused   = sizeof(mixed);
+    data.wsize   = sizeof(mixed);
+    data.wbuffer = mixed;
+
+    while ((state = ippReadIO(&data, (ipp_iocb_t)read_cb, 1, NULL,
+                              request)) != IPP_DATA)
+      if (state == IPP_ERROR)
+	break;
+
+    length = ippLength(request);
+
+    if (state != IPP_DATA)
+    {
+      printf("FAIL - %d bytes read.\n", (int)data.rpos);
+      status = 1;
+    }
+    else if (data.rpos != sizeof(mixed))
+    {
+      printf("FAIL - read %d bytes, expected %d bytes!\n", (int)data.rpos,
+             (int)sizeof(mixed));
+      print_attributes(request, 8);
+      status = 1;
+    }
+    else if (length != (sizeof(mixed) + 4))
+    {
+      printf("FAIL - wrong ippLength(), %d instead of %d bytes!\n",
+             length, (int)sizeof(mixed) + 4);
+      print_attributes(request, 8);
+      status = 1;
+    }
+    else
+      puts("PASS");
+
+    fputs("ippFindAttribute(notify-lease-duration-supported): ", stdout);
+    if ((attr = ippFindAttribute(request, "notify-lease-duration-supported",
+                                 IPP_TAG_ZERO)) == NULL)
+    {
+      puts("FAIL (not found)");
+      status = 1;
+    }
+    else if (attr->value_tag != IPP_TAG_RANGE)
+    {
+      printf("FAIL (wrong type - %s)\n", ippTagString(attr->value_tag));
+      status = 1;
+    }
+    else if (attr->num_values != 2)
+    {
+      printf("FAIL (wrong count - %d)\n", attr->num_values);
+      status = 1;
+    }
+    else if (attr->values[0].range.lower != 1 ||
+             attr->values[0].range.upper != 1 ||
+             attr->values[1].range.lower != 16 ||
+             attr->values[1].range.upper != 32)
+    {
+      printf("FAIL (wrong values - %d,%d and %d,%d)\n",
+             attr->values[0].range.lower,
+             attr->values[0].range.upper,
+             attr->values[1].range.lower,
+             attr->values[1].range.upper);
+      status = 1;
+    }
+    else
+      puts("PASS");
+
     ippDelete(request);
 
    /*
     * Test _ippFindOption() private API...
     */
 
-    fputs("_ippFindOption(\"printer-type\"): ", stdout);
+    fputs("_ippFindOption(printer-type): ", stdout);
     if (_ippFindOption("printer-type"))
       puts("PASS");
     else
@@ -305,7 +657,7 @@ main(int  argc,			/* I - Number of command-line arguments */
 
     for (i = 1; i < argc; i ++)
     {
-      if ((fd = open(argv[i], O_RDONLY)) < 0)
+      if ((fp = cupsFileOpen(argv[i], "r")) == NULL)
       {
 	printf("Unable to open \"%s\" - %s\n", argv[i], strerror(errno));
 	status = 1;
@@ -313,7 +665,8 @@ main(int  argc,			/* I - Number of command-line arguments */
       }
 
       request = ippNew();
-      while ((state = ippReadFile(fd, request)) == IPP_ATTRIBUTE);
+      while ((state = ippReadIO(fp, (ipp_iocb_t)cupsFileRead, 1, NULL,
+                                request)) == IPP_ATTRIBUTE);
 
       if (state != IPP_DATA)
       {
@@ -327,7 +680,7 @@ main(int  argc,			/* I - Number of command-line arguments */
       }
 
       ippDelete(request);
-      close(fd);
+      cupsFileClose(fp);
     }
   }
 
@@ -405,7 +758,7 @@ print_attributes(ipp_t *ipp,		/* I - IPP request */
   int			i;		/* Looping var */
   ipp_tag_t		group;		/* Current group */
   ipp_attribute_t	*attr;		/* Current attribute */
-  ipp_value_t		*val;		/* Current value */
+  _ipp_value_t		*val;		/* Current value */
   static const char * const tags[] =	/* Value/group tag strings */
 			{
 			  "reserved-00",
@@ -548,7 +901,7 @@ print_attributes(ipp_t *ipp,		/* I - IPP request */
       case IPP_TAG_RESOLUTION :
           for (i = 0, val = attr->values; i < attr->num_values; i ++, val ++)
 	    printf(" %dx%d%s", val->resolution.xres, val->resolution.yres,
-	           val->resolution.units == IPP_RES_PER_INCH ? "dpi" : "dpc");
+	           val->resolution.units == IPP_RES_PER_INCH ? "dpi" : "dpcm");
           putchar('\n');
           break;
 
@@ -592,25 +945,28 @@ print_attributes(ipp_t *ipp,		/* I - IPP request */
  */
 
 ssize_t					/* O - Number of bytes read */
-read_cb(void        *data,		/* I - Data */
+read_cb(_ippdata_t   *data,		/* I - Data */
         ipp_uchar_t *buffer,		/* O - Buffer to read */
 	size_t      bytes)		/* I - Number of bytes to read */
 {
-  int	count;				/* Number of bytes */
+  size_t	count;			/* Number of bytes */
 
 
  /*
   * Copy bytes from the data buffer to the read buffer...
   */
 
-  for (count = bytes; count > 0 && rpos < wused; count --, rpos ++)
-    *buffer++ = wbuffer[rpos];
+  if ((count = data->wsize - data->rpos) > bytes)
+    count = bytes;
+
+  memcpy(buffer, data->wbuffer + data->rpos, count);
+  data->rpos += count;
 
  /*
   * Return the number of bytes read...
   */
 
-  return (bytes - count);
+  return (count);
 }
 
 
@@ -619,28 +975,31 @@ read_cb(void        *data,		/* I - Data */
  */
 
 ssize_t					/* O - Number of bytes written */
-write_cb(void        *data,		/* I - Data */
+write_cb(_ippdata_t   *data,		/* I - Data */
          ipp_uchar_t *buffer,		/* I - Buffer to write */
 	 size_t      bytes)		/* I - Number of bytes to write */
 {
-  int	count;				/* Number of bytes */
+  size_t	count;			/* Number of bytes */
 
 
  /*
   * Loop until all bytes are written...
   */
 
-  for (count = bytes; count > 0 && wused < sizeof(wbuffer); count --, wused ++)
-    wbuffer[wused] = *buffer++;
+  if ((count = data->wsize - data->wused) > bytes)
+    count = bytes;
+
+  memcpy(data->wbuffer + data->wused, buffer, count);
+  data->wused += count;
 
  /*
   * Return the number of bytes written...
   */
 
-  return (bytes - count);
+  return (count);
 }
 
 
 /*
- * End of "$Id: testipp.c 8234 2009-01-12 23:50:35Z mike $".
+ * End of "$Id: testipp.c 6649 2007-07-11 21:46:42Z mike $".
  */

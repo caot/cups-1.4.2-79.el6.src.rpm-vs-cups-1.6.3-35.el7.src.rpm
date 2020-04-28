@@ -1,9 +1,9 @@
 /*
- * "$Id: snmp-supplies.c 8805 2009-08-31 16:34:06Z mike $"
+ * "$Id: snmp-supplies.c 4298 2013-05-10 16:52:10Z msweet $"
  *
- *   SNMP supplies functions for the Common UNIX Printing System (CUPS).
+ *   SNMP supplies functions for CUPS.
  *
- *   Copyright 2008-2009 by Apple Inc.
+ *   Copyright 2008-2013 by Apple Inc.
  *
  *   These coded instructions, statements, and computer programs are the
  *   property of Apple Inc. and are protected by Federal copyright
@@ -36,6 +36,22 @@
 #define CUPS_MAX_SUPPLIES	32	/* Maximum number of supplies for a printer */
 #define CUPS_SUPPLY_TIMEOUT	2.0	/* Timeout for SNMP lookups */
 
+#define CUPS_DEVELOPER_LOW	0x0001
+#define CUPS_DEVELOPER_EMPTY	0x0002
+#define CUPS_MARKER_SUPPLY_LOW	0x0004
+#define CUPS_MARKER_SUPPLY_EMPTY 0x0008
+#define CUPS_OPC_NEAR_EOL	0x0010
+#define CUPS_OPC_LIFE_OVER	0x0020
+#define CUPS_TONER_LOW		0x0040
+#define CUPS_TONER_EMPTY	0x0080
+#define CUPS_WASTE_ALMOST_FULL	0x0100
+#define CUPS_WASTE_FULL		0x0200
+#define CUPS_CLEANER_NEAR_EOL	0x0400	/* Proposed JPS3 */
+#define CUPS_CLEANER_LIFE_OVER	0x0800	/* Proposed JPS3 */
+
+#define CUPS_SNMP_NONE		0x0000
+#define CUPS_SNMP_CAPACITY	0x0001	/* Supply levels reported as percentages */
+
 
 /*
  * Local structures...
@@ -66,10 +82,14 @@ static http_addr_t	current_addr;	/* Current address */
 static int		current_state = -1;
 					/* Current device state bits */
 static int		charset = -1;	/* Character set for supply names */
+static unsigned		quirks = CUPS_SNMP_NONE;
+					/* Quirks we have to work around */
 static int		num_supplies = 0;
 					/* Number of supplies found */
 static backend_supplies_t supplies[CUPS_MAX_SUPPLIES];
 					/* Supply information */
+static int		supply_state = -1;
+					/* Supply state info */
 
 static const int	hrDeviceDescr[] =
 			{ CUPS_OID_hrDeviceDescr, 1, -1 };
@@ -135,13 +155,20 @@ static const int	prtMarkerSuppliesType[] =
 			(sizeof(prtMarkerSuppliesType) /
 			 sizeof(prtMarkerSuppliesType[0]));
 			 		/* Offset to supply index */
+static const int	prtMarkerSuppliesSupplyUnit[] =
+			{ CUPS_OID_prtMarkerSuppliesSupplyUnit, -1 },
+					/* Units OID */
+			prtMarkerSuppliesSupplyUnitOffset =
+			(sizeof(prtMarkerSuppliesSupplyUnit) /
+			 sizeof(prtMarkerSuppliesSupplyUnit[0]));
+					/* Offset to supply index */
 
-static const backend_state_t const printer_states[] =
+static const backend_state_t printer_states[] =
 			{
-			  { CUPS_TC_lowPaper, "media-low-report" },
+			  /* { CUPS_TC_lowPaper, "media-low-report" }, */
 			  { CUPS_TC_noPaper | CUPS_TC_inputTrayEmpty, "media-empty-warning" },
-			  { CUPS_TC_lowToner, "toner-low-report" },
-			  { CUPS_TC_noToner, "toner-empty-warning" },
+			  /* { CUPS_TC_lowToner, "toner-low-report" }, */ /* now use prtMarkerSupplies */
+			  /* { CUPS_TC_noToner, "toner-empty-warning" }, */ /* now use prtMarkerSupplies */
 			  { CUPS_TC_doorOpen, "door-open-report" },
 			  { CUPS_TC_jammed, "media-jam-warning" },
 			  /* { CUPS_TC_offline, "offline-report" }, */ /* unreliable */
@@ -151,6 +178,22 @@ static const backend_state_t const printer_states[] =
 			  { CUPS_TC_markerSupplyMissing, "marker-supply-missing-warning" },
 			  { CUPS_TC_outputNearFull, "output-area-almost-full-report" },
 			  { CUPS_TC_outputFull, "output-area-full-warning" }
+			};
+
+static const backend_state_t supply_states[] =
+			{
+			  { CUPS_DEVELOPER_LOW, "developer-low-report" },
+			  { CUPS_DEVELOPER_EMPTY, "developer-empty-warning" },
+			  { CUPS_MARKER_SUPPLY_LOW, "marker-supply-low-report" },
+			  { CUPS_MARKER_SUPPLY_EMPTY, "marker-supply-empty-warning" },
+			  { CUPS_OPC_NEAR_EOL, "opc-near-eol-report" },
+			  { CUPS_OPC_LIFE_OVER, "opc-life-over-warning" },
+			  { CUPS_TONER_LOW, "toner-low-report" },
+			  { CUPS_TONER_EMPTY, "toner-empty-warning" },
+			  { CUPS_WASTE_ALMOST_FULL, "waste-receptacle-almost-full-report" },
+			  { CUPS_WASTE_FULL, "waste-receptacle-full-warning" },
+			  { CUPS_CLEANER_NEAR_EOL, "cleaner-life-almost-over-report" },
+			  { CUPS_CLEANER_LIFE_OVER, "cleaner-life-over-warning" },
 			};
 
 
@@ -191,13 +234,14 @@ backendSNMPSupplies(
   if (num_supplies > 0)
   {
     int		i,			/* Looping var */
+		percent,		/* Percent full */
 		new_state,		/* New state value */
-		change_state;		/* State change */
+		change_state,		/* State change */
+		new_supply_state = 0;	/* Supply state */
     char	value[CUPS_MAX_SUPPLIES * 4],
 					/* marker-levels value string */
 		*ptr;			/* Pointer into value string */
     cups_snmp_t	packet;			/* SNMP response packet */
-      
 
    /*
     * Generate the marker-levels value string...
@@ -205,16 +249,101 @@ backendSNMPSupplies(
 
     for (i = 0, ptr = value; i < num_supplies; i ++, ptr += strlen(ptr))
     {
+      if (supplies[i].max_capacity > 0 && supplies[i].level >= 0)
+	percent = 100 * supplies[i].level / supplies[i].max_capacity;
+      else if (supplies[i].level >= 0 && supplies[i].level <= 100 &&
+               (quirks & CUPS_SNMP_CAPACITY))
+        percent = supplies[i].level;
+      else
+        percent = 50;
+
+      if (percent <= 5)
+      {
+        switch (supplies[i].type)
+        {
+          case CUPS_TC_toner :
+          case CUPS_TC_tonerCartridge :
+              if (percent <= 1)
+                new_supply_state |= CUPS_TONER_EMPTY;
+              else
+                new_supply_state |= CUPS_TONER_LOW;
+              break;
+          case CUPS_TC_ink :
+          case CUPS_TC_inkCartridge :
+          case CUPS_TC_inkRibbon :
+          case CUPS_TC_solidWax :
+          case CUPS_TC_ribbonWax :
+              if (percent <= 1)
+                new_supply_state |= CUPS_MARKER_SUPPLY_EMPTY;
+              else
+                new_supply_state |= CUPS_MARKER_SUPPLY_LOW;
+              break;
+          case CUPS_TC_developer :
+              if (percent <= 1)
+                new_supply_state |= CUPS_DEVELOPER_EMPTY;
+              else
+                new_supply_state |= CUPS_DEVELOPER_LOW;
+              break;
+          case CUPS_TC_coronaWire :
+          case CUPS_TC_fuser :
+          case CUPS_TC_opc :
+          case CUPS_TC_transferUnit :
+              if (percent <= 1)
+                new_supply_state |= CUPS_OPC_LIFE_OVER;
+              else
+                new_supply_state |= CUPS_OPC_NEAR_EOL;
+              break;
+          case CUPS_TC_wasteInk :
+          case CUPS_TC_wastePaper :
+          case CUPS_TC_wasteToner :
+          case CUPS_TC_wasteWater :
+          case CUPS_TC_wasteWax :
+              if (percent <= 1)
+                new_supply_state |= CUPS_WASTE_FULL;
+              else
+                new_supply_state |= CUPS_WASTE_ALMOST_FULL;
+              break;
+          case CUPS_TC_cleanerUnit :
+          case CUPS_TC_fuserCleaningPad :
+              if (percent <= 1)
+                new_supply_state |= CUPS_CLEANER_LIFE_OVER;
+              else
+                new_supply_state |= CUPS_CLEANER_NEAR_EOL;
+              break;
+        }
+      }
+
       if (i)
         *ptr++ = ',';
 
-      if (supplies[i].max_capacity > 0)
-        sprintf(ptr, "%d", 100 * supplies[i].level / supplies[i].max_capacity);
+      if ((supplies[i].max_capacity > 0 || (quirks & CUPS_SNMP_CAPACITY)) &&
+          supplies[i].level >= 0)
+        sprintf(ptr, "%d", percent);
       else
         strcpy(ptr, "-1");
     }
 
     fprintf(stderr, "ATTR: marker-levels=%s\n", value);
+
+    if (supply_state < 0)
+      change_state = 0xffff;
+    else
+      change_state = supply_state ^ new_supply_state;
+
+    fprintf(stderr, "DEBUG: new_supply_state=%x, change_state=%x\n",
+            new_supply_state, change_state);
+
+    for (i = 0;
+         i < (int)(sizeof(supply_states) / sizeof(supply_states[0]));
+         i ++)
+      if (change_state & supply_states[i].bit)
+      {
+	fprintf(stderr, "STATE: %c%s\n",
+		(new_supply_state & supply_states[i].bit) ? '+' : '-',
+		supply_states[i].keyword);
+      }
+
+    supply_state = new_supply_state;
 
    /*
     * Get the current printer status bits...
@@ -232,6 +361,8 @@ backendSNMPSupplies(
     if (packet.object_value.string.num_bytes == 2)
       new_state = (packet.object_value.string.bytes[0] << 8) |
 		  packet.object_value.string.bytes[1];
+    else if (packet.object_value.string.num_bytes == 1)
+      new_state = (packet.object_value.string.bytes[0] << 8);
     else
       new_state = 0;
 
@@ -240,13 +371,18 @@ backendSNMPSupplies(
     else
       change_state = current_state ^ new_state;
 
+    fprintf(stderr, "DEBUG: new_state=%x, change_state=%x\n", new_state,
+            change_state);
+
     for (i = 0;
          i < (int)(sizeof(printer_states) / sizeof(printer_states[0]));
          i ++)
       if (change_state & printer_states[i].bit)
+      {
 	fprintf(stderr, "STATE: %c%s\n",
-	        (new_state & printer_states[i].bit) ? '+' : '-',
+		(new_state & printer_states[i].bit) ? '+' : '-',
 		printer_states[i].keyword);
+      }
 
     current_state = new_state;
 
@@ -310,7 +446,7 @@ backend_init_supplies(
 		cachefilename[1024],	/* Cache filename */
 		description[CUPS_SNMP_MAX_STRING],
 					/* Device description string */
-		value[CUPS_MAX_SUPPLIES * (CUPS_SNMP_MAX_STRING * 2 + 3)],
+		value[CUPS_MAX_SUPPLIES * (CUPS_SNMP_MAX_STRING * 4 + 3)],
 					/* Value string */
 		*ptr,			/* Pointer into value string */
 		*name_ptr;		/* Pointer into name string */
@@ -371,12 +507,18 @@ backend_init_supplies(
   * See if we should be getting supply levels via SNMP...
   */
 
-  if ((ppd = ppdOpenFile(getenv("PPD"))) != NULL &&
-      (ppdattr = ppdFindAttr(ppd, "cupsSNMPSupplies", NULL)) != NULL &&
-      ppdattr->value && strcasecmp(ppdattr->value, "true"))
+  if ((ppd = ppdOpenFile(getenv("PPD"))) == NULL ||
+      ((ppdattr = ppdFindAttr(ppd, "cupsSNMPSupplies", NULL)) != NULL &&
+       ppdattr->value && _cups_strcasecmp(ppdattr->value, "true")))
   {
     ppdClose(ppd);
     return;
+  }
+
+  if ((ppdattr = ppdFindAttr(ppd, "cupsSNMPQuirks", NULL)) != NULL)
+  {
+    if (!_cups_strcasecmp(ppdattr->value, "capacity"))
+      quirks |= CUPS_SNMP_CAPACITY;
   }
 
   ppdClose(ppd);
@@ -561,7 +703,8 @@ backend_init_supplies(
   fprintf(stderr, "ATTR: marker-colors=%s\n", value);
 
  /*
-  * Output the marker-names attribute...
+  * Output the marker-names attribute (the double quoting is necessary to deal
+  * with embedded quotes and commas in the marker names...)
   */
 
   for (i = 0, ptr = value; i < num_supplies; i ++)
@@ -569,15 +712,21 @@ backend_init_supplies(
     if (i)
       *ptr++ = ',';
 
+    *ptr++ = '\'';
     *ptr++ = '\"';
     for (name_ptr = supplies[i].name; *name_ptr;)
     {
-      if (*name_ptr == '\\' || *name_ptr == '\"')
+      if (*name_ptr == '\\' || *name_ptr == '\"' || *name_ptr == '\'')
+      {
         *ptr++ = '\\';
+        *ptr++ = '\\';
+        *ptr++ = '\\';
+      }
 
       *ptr++ = *name_ptr++;
     }
     *ptr++ = '\"';
+    *ptr++ = '\'';
   }
 
   *ptr = '\0';
@@ -614,16 +763,33 @@ backend_walk_cb(cups_snmp_t *packet,	/* I - SNMP packet */
                 void        *data)	/* I - User data (unused) */
 {
   int	i, j, k;			/* Looping vars */
-  static const char * const colors[8][2] =
+  static const char * const colors[][2] =
   {					/* Standard color names */
-    { "black",   "#000000" },
-    { "blue",    "#0000FF" },
-    { "cyan",    "#00FFFF" },
-    { "green",   "#00FF00" },
-    { "magenta", "#FF00FF" },
-    { "red",     "#FF0000" },
-    { "white",   "#FFFFFF" },
-    { "yellow",  "#FFFF00" }
+    { "black",         "#000000" },
+    { "blue",          "#0000FF" },
+    { "brown",         "#A52A2A" },
+    { "cyan",          "#00FFFF" },
+    { "dark-gray",     "#404040" },
+    { "dark gray",     "#404040" },
+    { "dark-yellow",   "#FFCC00" },
+    { "dark yellow",   "#FFCC00" },
+    { "gold",          "#FFD700" },
+    { "gray",          "#808080" },
+    { "green",         "#00FF00" },
+    { "light-black",   "#606060" },
+    { "light black",   "#606060" },
+    { "light-cyan",    "#E0FFFF" },
+    { "light cyan",    "#E0FFFF" },
+    { "light-gray",    "#D3D3D3" },
+    { "light gray",    "#D3D3D3" },
+    { "light-magenta", "#FF77FF" },
+    { "light magenta", "#FF77FF" },
+    { "magenta",       "#FF00FF" },
+    { "orange",        "#FFA500" },
+    { "red",           "#FF0000" },
+    { "silver",        "#C0C0C0" },
+    { "white",         "#FFFFFF" },
+    { "yellow",        "#FFFF00" }
   };
 
 
@@ -645,7 +811,8 @@ backend_walk_cb(cups_snmp_t *packet,	/* I - SNMP packet */
       if (supplies[j].colorant == i)
       {
 	for (k = 0; k < (int)(sizeof(colors) / sizeof(colors[0])); k ++)
-	  if (!strcmp(colors[k][0], (char *)packet->object_value.string.bytes))
+	  if (!_cups_strcasecmp(colors[k][0],
+	                        (char *)packet->object_value.string.bytes))
 	  {
 	    strcpy(supplies[j].color, colors[k][1]);
 	    break;
@@ -703,6 +870,7 @@ backend_walk_cb(cups_snmp_t *packet,	/* I - SNMP packet */
           break;
 
       case CUPS_TC_csShiftJIS :
+      case CUPS_TC_csWindows31J : /* Close enough for our purposes */
 	  cupsCharsetToUTF8((cups_utf8_t *)supplies[i - 1].name,
 	                    (char *)packet->object_value.string.bytes,
 		            sizeof(supplies[0].name), CUPS_JIS_X0213);
@@ -734,7 +902,6 @@ backend_walk_cb(cups_snmp_t *packet,	/* I - SNMP packet */
 
           {
 	    char	*src, *dst;	/* Pointers into strings */
-
 
            /*
 	    * Loop safe because both the object_value and supplies char arrays
@@ -780,7 +947,8 @@ backend_walk_cb(cups_snmp_t *packet,	/* I - SNMP packet */
 
     supplies[i - 1].level = packet->object_value.integer;
   }
-  else if (_cupsSNMPIsOIDPrefixed(packet, prtMarkerSuppliesMaxCapacity))
+  else if (_cupsSNMPIsOIDPrefixed(packet, prtMarkerSuppliesMaxCapacity) &&
+           !(quirks & CUPS_SNMP_CAPACITY))
   {
    /*
     * Get max capacity...
@@ -797,7 +965,9 @@ backend_walk_cb(cups_snmp_t *packet,	/* I - SNMP packet */
     if (i > num_supplies)
       num_supplies = i;
 
-    supplies[i - 1].max_capacity = packet->object_value.integer;
+    if (supplies[i - 1].max_capacity == 0 &&
+        packet->object_value.integer > 0)
+      supplies[i - 1].max_capacity = packet->object_value.integer;
   }
   else if (_cupsSNMPIsOIDPrefixed(packet, prtMarkerSuppliesType))
   {
@@ -817,6 +987,26 @@ backend_walk_cb(cups_snmp_t *packet,	/* I - SNMP packet */
       num_supplies = i;
 
     supplies[i - 1].type = packet->object_value.integer;
+  }
+  else if (_cupsSNMPIsOIDPrefixed(packet, prtMarkerSuppliesSupplyUnit))
+  {
+   /*
+    * Get units for capacity...
+    */
+
+    i = packet->object_name[prtMarkerSuppliesSupplyUnitOffset];
+    if (i < 1 || i > CUPS_MAX_SUPPLIES ||
+        packet->object_type != CUPS_ASN1_INTEGER)
+      return;
+
+    fprintf(stderr, "DEBUG2: prtMarkerSuppliesSupplyUnit.1.%d = %d\n", i,
+            packet->object_value.integer);
+
+    if (i > num_supplies)
+      num_supplies = i;
+
+    if (packet->object_value.integer == CUPS_TC_percent)
+      supplies[i - 1].max_capacity = 100;
   }
 }
 
@@ -883,5 +1073,5 @@ utf16_to_utf8(
 
 
 /*
- * End of "$Id: snmp-supplies.c 8805 2009-08-31 16:34:06Z mike $".
+ * End of "$Id: snmp-supplies.c 4298 2013-05-10 16:52:10Z msweet $".
  */

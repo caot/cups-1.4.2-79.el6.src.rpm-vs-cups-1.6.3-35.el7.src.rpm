@@ -1,9 +1,9 @@
 /*
- * "$Id: classes.h 7964 2008-09-19 20:03:36Z mike $"
+ * "$Id: classes.h 6649 2007-07-11 21:46:42Z mike $"
  *
- *   Printer class definitions for the Common UNIX Printing System (CUPS).
+ *   Printer class definitions for the CUPS scheduler.
  *
- *   Copyright 2007-2008 by Apple Inc.
+ *   Copyright 2007-2011 by Apple Inc.
  *   Copyright 1997-2005 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -21,16 +21,15 @@
 extern cupsd_printer_t	*cupsdAddClass(const char *name);
 extern void		cupsdAddPrinterToClass(cupsd_printer_t *c,
 			                       cupsd_printer_t *p);
-extern void		cupsdDeletePrinterFromClass(cupsd_printer_t *c,
+extern int		cupsdDeletePrinterFromClass(cupsd_printer_t *c,
 			                            cupsd_printer_t *p);
-extern void		cupsdDeletePrinterFromClasses(cupsd_printer_t *p);
+extern int		cupsdDeletePrinterFromClasses(cupsd_printer_t *p);
 extern cupsd_printer_t	*cupsdFindAvailablePrinter(const char *name);
 extern cupsd_printer_t	*cupsdFindClass(const char *name);
 extern void		cupsdLoadAllClasses(void);
 extern void		cupsdSaveAllClasses(void);
-extern void		cupsdUpdateImplicitClasses(void);
 
 
 /*
- * End of "$Id: classes.h 7964 2008-09-19 20:03:36Z mike $".
+ * End of "$Id: classes.h 6649 2007-07-11 21:46:42Z mike $".
  */

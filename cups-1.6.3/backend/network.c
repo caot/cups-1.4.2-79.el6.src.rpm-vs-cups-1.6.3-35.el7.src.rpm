@@ -1,9 +1,9 @@
 /*
- * "$Id: network.c 8807 2009-08-31 18:45:43Z mike $"
+ * "$Id: network.c 3755 2012-03-30 05:59:14Z msweet $"
  *
- *   Common network APIs for the Common UNIX Printing System (CUPS).
+ *   Common backend network APIs for CUPS.
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2011 by Apple Inc.
  *   Copyright 2006-2007 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -71,7 +71,7 @@ backendNetworkSideCB(
 {
   cups_sc_command_t	command;	/* Request command */
   cups_sc_status_t	status;		/* Request/response status */
-  char			data[2048];	/* Request/response data */
+  char			data[65536];	/* Request/response data */
   int			datalen;	/* Request/response data size */
   const char		*device_id;	/* 1284DEVICEID env var */
 
@@ -92,7 +92,7 @@ backendNetworkSideCB(
 	  status = CUPS_SC_STATUS_NOT_IMPLEMENTED;
 	else if (backendDrainOutput(print_fd, device_fd))
 	  status = CUPS_SC_STATUS_IO_ERROR;
-	else 
+	else
           status = CUPS_SC_STATUS_OK;
 
 	datalen = 0;
@@ -119,8 +119,35 @@ backendNetworkSideCB(
 
         if (snmp_fd >= 0)
 	{
+	  char		*dataptr;	/* Pointer into data */
 	  cups_snmp_t	packet;		/* Packet from printer */
+          const char	*snmp_value;	/* CUPS_SNMP_VALUE env var */
 
+          if ((snmp_value = getenv("CUPS_SNMP_VALUE")) != NULL)
+          {
+            const char	*snmp_count;	/* CUPS_SNMP_COUNT env var */
+            int		count;		/* Repetition count */
+
+            if ((snmp_count = getenv("CUPS_SNMP_COUNT")) != NULL)
+            {
+              if ((count = atoi(snmp_count)) <= 0)
+                count = 1;
+            }
+            else
+              count = 1;
+
+	    for (dataptr = data + strlen(data) + 1;
+	         count > 0 && dataptr < (data + sizeof(data) - 1);
+	         count --, dataptr += strlen(dataptr))
+	      strlcpy(dataptr, snmp_value, sizeof(data) - (dataptr - data));
+
+	    fprintf(stderr, "DEBUG: Returning %s %s\n", data,
+	            data + strlen(data) + 1);
+
+	    status  = CUPS_SC_STATUS_OK;
+	    datalen = dataptr - data;
+	    break;
+          }
 
           if (!_cupsSNMPStringToOID(data, packet.object_name, CUPS_SNMP_MAX_OID))
 	  {
@@ -141,7 +168,6 @@ backendNetworkSideCB(
           {
 	    if (_cupsSNMPRead(snmp_fd, &packet, 1.0))
 	    {
-	      char	*dataptr;	/* Pointer into data */
 	      int	i;		/* Looping var */
 
 
@@ -170,9 +196,13 @@ backendNetworkSideCB(
 
 	        case CUPS_ASN1_BIT_STRING :
 	        case CUPS_ASN1_OCTET_STRING :
-		    i = (int)(sizeof(data) - (dataptr - data));
-		    if (packet.object_value.string.num_bytes < i)
+		    if (packet.object_value.string.num_bytes < 0)
+		      i = 0;
+		    else if (packet.object_value.string.num_bytes <
+			     (sizeof(data) - (dataptr - data)))
 		      i = packet.object_value.string.num_bytes;
+		    else
+		      i = (int)(sizeof(data) - (dataptr - data));
 
 		    memcpy(dataptr, packet.object_value.string.bytes, i);
 
@@ -275,6 +305,12 @@ backendNetworkSideCB(
 	  break;
 	}
 
+    case CUPS_SC_CMD_GET_CONNECTED :
+	status  = CUPS_SC_STATUS_OK;
+        data[0] = device_fd != -1;
+        datalen = 1;
+        break;
+
     default :
         status  = CUPS_SC_STATUS_NOT_IMPLEMENTED;
 	datalen = 0;
@@ -286,5 +322,5 @@ backendNetworkSideCB(
 
 
 /*
- * End of "$Id: network.c 8807 2009-08-31 18:45:43Z mike $".
+ * End of "$Id: network.c 3755 2012-03-30 05:59:14Z msweet $".
  */

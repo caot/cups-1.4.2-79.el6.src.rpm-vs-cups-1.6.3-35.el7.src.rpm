@@ -1,9 +1,9 @@
 //
-// "$Id: ppdc-catalog.cxx 8484 2009-04-03 17:35:17Z mike $"
+// "$Id: ppdc-catalog.cxx 3794 2012-04-23 22:44:16Z msweet $"
 //
 //   Shared message catalog class for the CUPS PPD Compiler.
 //
-//   Copyright 2007-2009 by Apple Inc.
+//   Copyright 2007-2012 by Apple Inc.
 //   Copyright 2002-2006 by Easy Software Products.
 //
 //   These coded instructions, statements, and computer programs are the
@@ -168,6 +168,9 @@ ppdcCatalog::find_message(
   ppdcMessage	*m;			// Current message
 
 
+  if (!*id)
+    return (id);
+
   for (m = (ppdcMessage *)messages->first();
        m;
        m = (ppdcMessage *)messages->next())
@@ -203,8 +206,8 @@ ppdcCatalog::load_messages(
   else if (!strcmp(ptr, ".strings"))
   {
    /*
-    * Read messages in Mac OS X ".strings" format, which are UTF-16 text
-    * files of the format:
+    * Read messages in OS X ".strings" format, which are UTF-16 text files of
+    * the format:
     *
     *     "id" = "str";
     *
@@ -315,7 +318,7 @@ ppdcCatalog::load_messages(
     int	which,				// In msgid?
 	haveid,				// Did we get a msgid string?
 	havestr;			// Did we get a msgstr string?
-		
+
     linenum = 0;
     id[0]   = '\0';
     str[0]  = '\0';
@@ -335,7 +338,7 @@ ppdcCatalog::load_messages(
       if ((ptr = (char *)strrchr(line, '\"')) == NULL)
       {
 	_cupsLangPrintf(stderr,
-	                _("ERROR: Expected quoted string on line %d of %s!\n"),
+	                _("ppdc: Expected quoted string on line %d of %s."),
 			linenum, f);
 	cupsFileClose(fp);
 	return (-1);
@@ -347,7 +350,7 @@ ppdcCatalog::load_messages(
       if ((ptr = strchr(line, '\"')) == NULL)
       {
 	_cupsLangPrintf(stderr,
-	                _("ERROR: Expected quoted string on line %d of %s!\n"),
+	                _("ppdc: Expected quoted string on line %d of %s."),
 			linenum, f);
 	cupsFileClose(fp);
 	return (-1);
@@ -412,8 +415,8 @@ ppdcCatalog::load_messages(
 	if (!haveid)
 	{
 	  _cupsLangPrintf(stderr,
-	                  _("ERROR: Need a msgid line before any "
-			    "translation strings on line %d of %s!\n"),
+	                  _("ppdc: Need a msgid line before any "
+			    "translation strings on line %d of %s."),
 			  linenum, f);
 	  cupsFileClose(fp);
 	  return (-1);
@@ -429,7 +432,7 @@ ppdcCatalog::load_messages(
 	strlcat(id, ptr, sizeof(id));
       else
       {
-	_cupsLangPrintf(stderr, _("ERROR: Unexpected text on line %d of %s!\n"),
+	_cupsLangPrintf(stderr, _("ppdc: Unexpected text on line %d of %s."),
 			linenum, f);
 	cupsFileClose(fp);
 	return (-1);
@@ -457,7 +460,7 @@ ppdcCatalog::load_messages(
   unknown_load_format:
 
   _cupsLangPrintf(stderr,
-                  _("ERROR: Unknown message catalog format for \"%s\"!\n"), f);
+                  _("ppdc: Unknown message catalog format for \"%s\"."), f);
   cupsFileClose(fp);
   return (-1);
 }
@@ -890,5 +893,5 @@ put_utf16(cups_file_t *fp,		// I - File to write to
 
 
 //
-// End of "$Id: ppdc-catalog.cxx 8484 2009-04-03 17:35:17Z mike $".
+// End of "$Id: ppdc-catalog.cxx 3794 2012-04-23 22:44:16Z msweet $".
 //

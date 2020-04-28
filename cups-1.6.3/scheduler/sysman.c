@@ -1,9 +1,9 @@
 /*
- * "$Id: sysman.c 8647 2009-05-16 21:49:57Z mike $"
+ * "$Id: sysman.c 7928 2008-09-10 22:14:22Z mike $"
  *
- *   System management definitions for the Common UNIX Printing System (CUPS).
+ *   System management functions for the CUPS scheduler.
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2011 by Apple Inc.
  *   Copyright 2006 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -40,6 +40,12 @@
 #ifdef HAVE_VPROC_TRANSACTION_BEGIN
 #  include <vproc.h>
 #endif /* HAVE_VPROC_TRANSACTION_BEGIN */
+#ifdef __APPLE__
+#  include <IOKit/pwr_mgt/IOPMLib.h>
+#  ifdef HAVE_IOKIT_PWR_MGT_IOPMLIBPRIVATE_H
+#    include <IOKit/pwr_mgt/IOPMLibPrivate.h>
+#  endif /* HAVE_IOKIT_PWR_MGT_IOPMLIBPRIVATE_H */
+#endif /* __APPLE__ */
 
 
 /*
@@ -52,12 +58,20 @@
  *
  * Power management support is currently only implemented on MacOS X, but
  * essentially we use four functions to let the OS know when it is OK to
- * put the system to idle sleep, typically when we are not in the middle of
+ * put the system to sleep, typically when we are not in the middle of
  * printing a job.
  *
  * Once put to sleep, we invalidate all remote printers since it is common
  * to wake up in a new location/on a new wireless network.
  */
+
+/*
+ * Local globals...
+ */
+
+#ifdef kIOPMAssertionTypeDenySystemSleep
+static IOPMAssertionID	dark_wake = 0;	/* "Dark wake" assertion for sharing */
+#endif /* kIOPMAssertionTypeDenySystemSleep */
 
 
 /*
@@ -72,9 +86,6 @@ cupsdCleanDirty(void)
 
   if (DirtyFiles & CUPSD_DIRTY_CLASSES)
     cupsdSaveAllClasses();
-
-  if (DirtyFiles & CUPSD_DIRTY_REMOTE)
-    cupsdSaveRemoteCache();
 
   if (DirtyFiles & CUPSD_DIRTY_PRINTCAP)
     cupsdWritePrintcap();
@@ -109,10 +120,9 @@ cupsdCleanDirty(void)
 void
 cupsdMarkDirty(int what)		/* I - What file(s) are dirty? */
 {
-  cupsdLogMessage(CUPSD_LOG_DEBUG, "cupsdMarkDirty(%c%c%c%c%c%c)",
+  cupsdLogMessage(CUPSD_LOG_DEBUG, "cupsdMarkDirty(%c%c%c%c%c)",
 		  (what & CUPSD_DIRTY_PRINTERS) ? 'P' : '-',
 		  (what & CUPSD_DIRTY_CLASSES) ? 'C' : '-',
-		  (what & CUPSD_DIRTY_REMOTE) ? 'R' : '-',
 		  (what & CUPSD_DIRTY_PRINTCAP) ? 'p' : '-',
 		  (what & CUPSD_DIRTY_JOBS) ? 'J' : '-',
 		  (what & CUPSD_DIRTY_SUBSCRIPTIONS) ? 'S' : '-');
@@ -136,8 +146,11 @@ cupsdMarkDirty(int what)		/* I - What file(s) are dirty? */
 void
 cupsdSetBusyState(void)
 {
-  int		newbusy;		/* New busy state */
-  static int	busy = 0;		/* Current busy state */
+  int			i;		/* Looping var */
+  cupsd_job_t		*job;		/* Current job */
+  cupsd_printer_t	*p;		/* Current printer */
+  int			newbusy;	/* New busy state */
+  static int		busy = 0;	/* Current busy state */
   static const char * const busy_text[] =
   {					/* Text for busy states */
     "Not busy",
@@ -154,9 +167,38 @@ cupsdSetBusyState(void)
 #endif /* HAVE_VPROC_TRANSACTION_BEGIN */
 
 
+ /*
+  * Figure out how busy we are...
+  */
+
   newbusy = (DirtyCleanTime ? 1 : 0) |
-            (cupsArrayCount(PrintingJobs) ? 2 : 0) |
 	    (cupsArrayCount(ActiveClients) ? 4 : 0);
+
+  for (job = (cupsd_job_t *)cupsArrayFirst(PrintingJobs);
+       job;
+       job = (cupsd_job_t *)cupsArrayNext(PrintingJobs))
+  {
+    if ((p = job->printer) != NULL)
+    {
+      for (i = 0; i < p->num_reasons; i ++)
+	if (!strcmp(p->reasons[i], "connecting-to-device"))
+	  break;
+
+      if (!p->num_reasons || i >= p->num_reasons)
+	break;
+    }
+  }
+
+  if (job)
+    newbusy |= 2;
+
+  cupsdLogMessage(CUPSD_LOG_DEBUG,
+                  "cupsdSetBusyState: newbusy=\"%s\", busy=\"%s\"",
+                  busy_text[newbusy], busy_text[busy]);
+
+ /*
+  * Manage state changes...
+  */
 
   if (newbusy != busy)
   {
@@ -171,9 +213,23 @@ cupsdSetBusyState(void)
       vtran = 0;
     }
 #endif /* HAVE_VPROC_TRANSACTION_BEGIN */
-
-    cupsdLogMessage(CUPSD_LOG_DEBUG, "cupsdSetBusyState: %s", busy_text[busy]);
   }
+
+#ifdef kIOPMAssertionTypeDenySystemSleep
+  if (cupsArrayCount(PrintingJobs) > 0 && !dark_wake)
+  {
+    cupsdLogMessage(CUPSD_LOG_DEBUG, "Asserting dark wake.");
+    IOPMAssertionCreateWithName(kIOPMAssertionTypeDenySystemSleep,
+				kIOPMAssertionLevelOn,
+				CFSTR("org.cups.cupsd"), &dark_wake);
+  }
+  else if (cupsArrayCount(PrintingJobs) == 0 && dark_wake)
+  {
+    cupsdLogMessage(CUPSD_LOG_DEBUG, "Releasing dark wake assertion.");
+    IOPMAssertionRelease(dark_wake);
+    dark_wake = 0;
+  }
+#endif /* kIOPMAssertionTypeDenySystemSleep */
 }
 
 
@@ -206,8 +262,8 @@ cupsdSetBusyState(void)
 #  define SYSEVENT_NAMECHANGED	0x10	/* Computer name changed */
 
 
-/* 
- * Structures... 
+/*
+ * Structures...
  */
 
 typedef struct cupsd_sysevent_s		/*** System event data ****/
@@ -226,14 +282,14 @@ typedef struct cupsd_thread_data_s	/*** Thread context data  ****/
 } cupsd_thread_data_t;
 
 
-/* 
- * Local globals... 
+/*
+ * Local globals...
  */
 
 static pthread_t	SysEventThread = NULL;
 					/* Thread to host a runloop */
 static pthread_mutex_t	SysEventThreadMutex = { 0 };
-					/* Coordinates access to shared gloabals */ 
+					/* Coordinates access to shared gloabals */
 static pthread_cond_t	SysEventThreadCond = { 0 };
 					/* Thread initialization complete condition */
 static CFRunLoopRef	SysEventRunloop = NULL;
@@ -256,8 +312,8 @@ static CFStringRef	ComputerNameKey = NULL,
 static cupsd_sysevent_t	LastSysEvent;	/* Last system event (for delayed sleep) */
 
 
-/* 
- * Local functions... 
+/*
+ * Local functions...
  */
 
 static void	*sysEventThreadEntry(void);
@@ -439,8 +495,8 @@ sysEventThreadEntry(void)
 						   kSCEntNetIPv6);
 
   if (!NetworkGlobalKeyDNS)
-    NetworkGlobalKeyDNS = 
-	SCDynamicStoreKeyCreateNetworkGlobalEntity(kCFAllocatorDefault, 
+    NetworkGlobalKeyDNS =
+	SCDynamicStoreKeyCreateNetworkGlobalEntity(kCFAllocatorDefault,
 						   kSCDynamicStoreDomainState,
 						   kSCEntNetDNS);
 
@@ -522,7 +578,7 @@ sysEventThreadEntry(void)
 
   threadData.timerRef =
       CFRunLoopTimerCreate(kCFAllocatorDefault,
-                           CFAbsoluteTimeGetCurrent() + (86400L * 365L * 10L), 
+                           CFAbsoluteTimeGetCurrent() + (86400L * 365L * 10L),
 			   86400L * 365L * 10L, 0, 0, sysEventTimerNotifier,
 			   &timerContext);
   CFRunLoopAddTimer(CFRunLoopGetCurrent(), threadData.timerRef,
@@ -614,7 +670,7 @@ sysEventPowerNotifier(
 	break;
 
     case kIOMessageSystemHasPoweredOn:
-       /* 
+       /*
 	* Because powered on is followed by a net-changed event, delay
 	* before sending it.
 	*/
@@ -642,7 +698,7 @@ sysEventPowerNotifier(
 
     if (sendit == 1)
     {
-     /* 
+     /*
       * Send the event to the main thread now.
       */
 
@@ -652,7 +708,7 @@ sysEventPowerNotifier(
     }
     else
     {
-     /* 
+     /*
       * Send the event to the main thread after 1 to 2 seconds.
       */
 
@@ -678,7 +734,7 @@ sysEventConfigurationNotifier(
 
 
   threadData = (cupsd_thread_data_t *)context;
-  
+
   (void)store;				/* anti-compiler-warning-code */
 
   CFRange range = CFRangeMake(0, CFArrayGetCount(changedKeys));
@@ -698,12 +754,12 @@ sysEventConfigurationNotifier(
   }
 
  /*
-  * Because we registered for several different kinds of change notifications 
-  * this callback usually gets called several times in a row. We use a timer to 
+  * Because we registered for several different kinds of change notifications
+  * this callback usually gets called several times in a row. We use a timer to
   * de-bounce these so we only end up generating one event for the main thread.
   */
 
-  CFRunLoopTimerSetNextFireDate(threadData->timerRef, 
+  CFRunLoopTimerSetNextFireDate(threadData->timerRef,
   				CFAbsoluteTimeGetCurrent() + 5);
 }
 
@@ -719,6 +775,8 @@ sysEventTimerNotifier(
 {
   cupsd_thread_data_t	*threadData;	/* Thread context data */
 
+
+  (void)timer;
 
   threadData = (cupsd_thread_data_t *)context;
 
@@ -803,23 +861,26 @@ sysUpdate(void)
            p;
 	   p = (cupsd_printer_t *)cupsArrayNext(Printers))
       {
-	if (p->type & CUPS_PRINTER_DISCOVERED)
-	{
-	  cupsdLogMessage(CUPSD_LOG_DEBUG,
-	                  "Deleting remote destination \"%s\"", p->name);
-	  cupsArraySave(Printers);
-	  cupsdDeletePrinter(p, 0);
-	  cupsArrayRestore(Printers);
-	}
-	else
-	{
-	  cupsdLogMessage(CUPSD_LOG_DEBUG,
-	                  "Deregistering local printer \"%s\"", p->name);
-	  cupsdDeregisterPrinter(p, 0);
-	}
+	cupsdLogMessage(CUPSD_LOG_DEBUG,
+			"Deregistering local printer \"%s\"", p->name);
+	cupsdDeregisterPrinter(p, 0);
       }
 
       cupsdCleanDirty();
+
+#ifdef kIOPMAssertionTypeDenySystemSleep
+     /*
+      * Remove our assertion as needed since the user wants the system to
+      * sleep (different than idle sleep)...
+      */
+
+      if (dark_wake)
+      {
+	cupsdLogMessage(CUPSD_LOG_DEBUG, "Releasing dark wake assertion.");
+	IOPMAssertionRelease(dark_wake);
+	dark_wake = 0;
+      }
+#endif /* kIOPMAssertionTypeDenySystemSleep */
 
      /*
       * If we have no printing jobs, allow the power change immediately.
@@ -832,8 +893,37 @@ sysUpdate(void)
 			   sysevent.powerNotificationID);
       else
       {
-        LastSysEvent = sysevent;
-        SleepJobs    = time(NULL) + 15;
+       /*
+	* If there are active printers that don't have the connecting-to-device
+	* printer-state-reason then delay the sleep request (i.e. this reason
+	* indicates a job that is not yet connected to the printer)...
+	*/
+
+	for (p = (cupsd_printer_t *)cupsArrayFirst(Printers);
+	     p;
+	     p = (cupsd_printer_t *)cupsArrayNext(Printers))
+	{
+	  if (p->job)
+	  {
+	    for (i = 0; i < p->num_reasons; i ++)
+	      if (!strcmp(p->reasons[i], "connecting-to-device"))
+		break;
+
+	    if (!p->num_reasons || i >= p->num_reasons)
+	      break;
+	  }
+	}
+
+	if (p)
+	{
+	  LastSysEvent = sysevent;
+	  SleepJobs    = time(NULL) + 10;
+	}
+	else
+	{
+	  IOAllowPowerChange(sysevent.powerKernelPort,
+			     sysevent.powerNotificationID);
+	}
       }
     }
 
@@ -843,29 +933,25 @@ sysUpdate(void)
       IOAllowPowerChange(sysevent.powerKernelPort,
                          sysevent.powerNotificationID);
       Sleeping = 0;
+
+#ifdef kIOPMAssertionTypeDenySystemSleep
+      if (cupsArrayCount(PrintingJobs) > 0 && !dark_wake)
+      {
+	cupsdLogMessage(CUPSD_LOG_DEBUG, "Asserting dark wake.");
+	IOPMAssertionCreateWithName(kIOPMAssertionTypeDenySystemSleep,
+				    kIOPMAssertionLevelOn,
+				    CFSTR("org.cups.cupsd"), &dark_wake);
+      }
+#endif /* kIOPMAssertionTypeDenySystemSleep */
+
       cupsdCheckJobs();
     }
 
     if (sysevent.event & SYSEVENT_NETCHANGED)
     {
       if (!Sleeping)
-      {
         cupsdLogMessage(CUPSD_LOG_DEBUG,
 	                "System network configuration changed");
-
-       /*
-        * Resetting browse_time before calling cupsdSendBrowseList causes
-	* browse packets to be sent for local shared printers.
-        */
-
-	for (p = (cupsd_printer_t *)cupsArrayFirst(Printers);
-	     p;
-	     p = (cupsd_printer_t *)cupsArrayNext(Printers))
-	  p->browse_time = 0;
-
-        cupsdSendBrowseList();
-	cupsdRestartPolling();
-      }
       else
         cupsdLogMessage(CUPSD_LOG_DEBUG,
 	                "System network configuration changed; "
@@ -888,11 +974,13 @@ sysUpdate(void)
 	     p = (cupsd_printer_t *)cupsArrayNext(Printers))
 	  cupsdDeregisterPrinter(p, 1);
 
+#  if defined(HAVE_DNSSD) || defined(HAVE_AVAHI)
        /*
         * Update the computer name and BTMM domain list...
 	*/
 
 	cupsdUpdateDNSSDName();
+#  endif /* HAVE_DNSSD || HAVE_AVAHI */
 
        /*
 	* Now re-register them...
@@ -901,10 +989,7 @@ sysUpdate(void)
 	for (p = (cupsd_printer_t *)cupsArrayFirst(Printers);
 	     p;
 	     p = (cupsd_printer_t *)cupsArrayNext(Printers))
-	{
-	  p->browse_time = 0;
 	  cupsdRegisterPrinter(p);
-	}
       }
       else
         cupsdLogMessage(CUPSD_LOG_DEBUG,
@@ -917,5 +1002,5 @@ sysUpdate(void)
 
 
 /*
- * End of "$Id: sysman.c 8647 2009-05-16 21:49:57Z mike $".
+ * End of "$Id: sysman.c 7928 2008-09-10 22:14:22Z mike $".
  */

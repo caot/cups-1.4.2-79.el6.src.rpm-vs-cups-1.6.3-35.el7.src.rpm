@@ -3,6 +3,7 @@
 <H2 CLASS="title">{op=modify-printer?Изменение {printer_name}:Добавление принтера}</H2>
 
 <FORM METHOD="POST" ACTION="/admin">
+<INPUT TYPE="HIDDEN" NAME="org.cups.sid" VALUE="{$org.cups.sid}">
 <INPUT TYPE="HIDDEN" NAME="OP" VALUE="{op}">
 {printer_name?<INPUT TYPE="HIDDEN" NAME="printer_name" VALUE="{printer_name}">:}
 
@@ -36,9 +37,9 @@
 <TH CLASS="label">Управление:</TH>
 <TD><SELECT NAME="FLOW">
 <OPTION VALUE="none" {?flow=none?SELECTED:}>Нет
-<OPTION VALUE="soft" {?flow=soft?SELECTED:}>XON/XOFF (программное)
-<OPTION VALUE="hard" {?flow=hard?SELECTED:}>RTS/CTS (аппаратное)
-<OPTION VALUE="dtrdsr" {?flow=dtrdsr?SELECTED:}>DTR/DSR (аппаратное)
+<OPTION VALUE="soft" {?flow=soft?SELECTED:}>XON/XOFF (Программное)
+<OPTION VALUE="hard" {?flow=hard?SELECTED:}>RTS/CTS (Аппаратное)
+<OPTION VALUE="dtrdsr" {?flow=dtrdsr?SELECTED:}>DTR/DSR (Аппаратное)
 </SELECT></TD>
 </TR>
 <TR>

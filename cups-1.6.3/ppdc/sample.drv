@@ -1,9 +1,9 @@
 //
-// "$Id: sample.drv 8651 2009-05-16 23:29:35Z mike $"
+// "$Id: sample.drv 3794 2012-04-23 22:44:16Z msweet $"
 //
 //   Driver info file for CUPS-supplied PPDs.
 //
-//   Copyright 2007-2009 by Apple Inc.
+//   Copyright 2007-2011 by Apple Inc.
 //   Copyright 1993-2006 by Easy Software Products.
 //
 //   These coded instructions, statements, and computer programs are the
@@ -44,15 +44,6 @@
 //#po zh_TW ""
 
 // MediaSize sizes used by label drivers...
-#media "w81h252/Address - 1 1/8 x 3 1/2\"" 81 252
-#media "w101h252/Large Address - 1 4/10 x 3 1/2\"" 101 252
-#media "w54h144/Return Address - 3/4 x 2\"" 54 144
-#media "w167h288/Shipping Address - 2 5/16 x 4\"" 167 288
-#media "w162h540/Internet Postage 2-Part - 2 1/4 x 7 1/2\"" 162 540
-#media "w162h504/Internet Postage 3-Part - 2 1/4 x 7\"" 162 504
-#media "w41h248/File Folder - 9/16 x 3 7/16\"" 41 248
-#media "w41h144/Hanging Folder - 9/16 x 2\"" 41 144
-#media "w153h198/3.5\" Disk - 2 1/8 x 2 3/4\"" 153 198
 #media "w90h18/1.25x0.25\"" 90 18
 #media "w90h162/1.25x2.25\"" 90 162
 #media "w108h18/1.50x0.25\"" 108 18
@@ -112,12 +103,12 @@
 #media "w576h468/8.00x6.50\"" 576 468
 
 // Common stuff for all drivers...
-Attribute "cupsVersion" "" "1.4"
+Attribute "cupsVersion" "" "1.6"
 Attribute "FileSystem" "" "False"
 Attribute "LandscapeOrientation" "" "Plus90"
 Attribute "TTRasterizer" "" "Type42"
 
-Copyright "Copyright 2007-2008 by Apple Inc."
+Copyright "Copyright 2007-2012 by Apple Inc."
 Copyright "Copyright 1997-2007 by Easy Software Products."
 Copyright ""
 Copyright "These coded instructions, statements, and computer programs are the"
@@ -128,7 +119,7 @@ Copyright "file is missing or damaged, see the license at \"http://www.cups.org/
 
 Font *
 
-Version "1.4"
+Version "1.5"
 
 // Dymo Label Printer
 {
@@ -139,7 +130,7 @@ Version "1.4"
   DriverType label
   ModelNumber $DYMO_3x0
   Throughput 8
-  ManualCopies No
+  ManualCopies Yes
   ColorDevice No
 
   HWMargins 2 14.9 2 14.9
@@ -154,9 +145,9 @@ Version "1.4"
   MediaSize w41h144
   MediaSize w153h198
 
-  Resolution k 1 0 0 0 136dpi 
-  Resolution k 1 0 0 0 203dpi 
-  *Resolution k 1 0 0 0 300dpi 
+  Resolution k 1 0 0 0 136dpi
+  Resolution k 1 0 0 0 203dpi
+  *Resolution k 1 0 0 0 300dpi
 
   Darkness 0 Light
   Darkness 1 Medium
@@ -211,7 +202,7 @@ Version "1.4"
     MediaSize A4
     MediaSize FanFoldUS
 
-    Resolution k 1 8 0 0 60x720dpi
+    Resolution k 1 8 0 0 60x72dpi
     *Resolution k 1 8 0 0 120x72dpi
     Resolution k 1 8 0 0 240x72dpi
   }
@@ -315,6 +306,7 @@ Version "1.4"
     Throughput 8
     ModelNumber $HP_LASERJET
     ColorDevice No
+    Attribute 1284DeviceID "" "CMD:PCL;"
 
     UIConstraints "*Duplex  *Option1 False"
     UIConstraints "*PageSize A3 *InputSlot Envelope"
@@ -364,9 +356,10 @@ Version "1.4"
     Attribute NickName "" "Generic PostScript Printer"
     PCFileName "generic.ppd"
     Throughput 8
-    ColorDevice No
+    ColorDevice Yes
     Attribute PSVersion "" "(2016.0) 0"
     Attribute LanguageLevel "" 2
+    Attribute 1284DeviceID "" "CMD:PS;"
 
     UIConstraints "*Duplex  *Option1 False"
 
@@ -387,11 +380,12 @@ Version "1.4"
 
     Option "InputSlot/Media Source" PickOne AnySetup 10
       *Choice "Default/Printer Default" ""
-      Choice "Tray1/Tray 1" "<</ManualFeed false>>setpagedevice"
+      Choice "Upper/Cassette" "<</ManualFeed false>>setpagedevice"
       Choice "Manual/Manual Feed" "<</ManualFeed true>>setpagedevice"
 
     Duplex Yes
     Installable "Option1/Duplexer"
+    Attribute "?Option1" "" "save currentpagedevice/Duplex known{(True)}{(False)}ifelse = flush restore"
   }
 }
 
@@ -409,6 +403,7 @@ Version "1.4"
     ManualCopies Yes
     ColorDevice Yes
     Throughput 1
+    Attribute 1284DeviceID "" "MFG:HP;MDL:HP DeskJet;CMD:PCL;"
 
     UIConstraints "*PageSize A3 *InputSlot Envelope"
     UIConstraints "*PageSize A4 *InputSlot Envelope"
@@ -443,7 +438,7 @@ Version "1.4"
     Resolution - 1 0 0 0 600dpi
 
     *InputSlot 1 Tray
-    InputSlot 2 "Manual/Manual Feed" 
+    InputSlot 2 "Manual/Manual Feed"
     InputSlot 3 "Envelope/Envelope Feed"
 
     *MediaType 0 "Plain/Plain Paper"
@@ -461,6 +456,7 @@ Version "1.4"
     Throughput 8
     ModelNumber $HP_LASERJET
     ColorDevice No
+    Attribute 1284DeviceID "" "MFG:HP;MDL:HP LaserJet;CMD:PCL;"
 
     UIConstraints "*Duplex  *Option1 False"
     UIConstraints "*PageSize A3 *InputSlot Envelope"
@@ -527,7 +523,7 @@ Version "1.4"
 
   *MediaSize w288h432
 
-  *Resolution k 1 0 0 0 300dpi 
+  *Resolution k 1 0 0 0 300dpi
 
   Group "PrinterSettings/Printer Settings"
     Option "inPrintDensity/Print Density" PickOne DocumentSetup 20.0
@@ -652,7 +648,7 @@ Version "1.4"
     ModelNumber $EPSON_9PIN
     ColorDevice No
 
-    Resolution k 1 8 0 0 60x720dpi
+    Resolution k 1 8 0 0 60x72dpi
     *Resolution k 1 8 0 0 120x72dpi
     Resolution k 1 8 0 0 240x72dpi
   }
@@ -1245,5 +1241,5 @@ Version "1.4"
 }
 
 //
-// End of "$Id: sample.drv 8651 2009-05-16 23:29:35Z mike $".
+// End of "$Id: sample.drv 3794 2012-04-23 22:44:16Z msweet $".
 //

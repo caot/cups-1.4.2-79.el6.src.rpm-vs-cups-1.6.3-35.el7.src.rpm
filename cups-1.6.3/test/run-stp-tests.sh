@@ -1,11 +1,11 @@
 #!/bin/sh
 #
-# "$Id: run-stp-tests.sh 8783 2009-08-28 17:51:05Z mike $"
+# "$Id: run-stp-tests.sh 9034 2010-03-09 07:03:06Z mike $"
 #
 #   Perform the complete set of IPP compliance tests specified in the
 #   CUPS Software Test Plan.
 #
-#   Copyright 2007-2009 by Apple Inc.
+#   Copyright 2007-2012 by Apple Inc.
 #   Copyright 1997-2007 by Easy Software Products, all rights reserved.
 #
 #   These coded instructions, statements, and computer programs are the
@@ -18,16 +18,41 @@
 argcount=$#
 
 #
+# Don't allow "make check" or "make test" to be run by root...
+#
+
+if test "x`id -u`" = x0; then
+	echo Please run this as a normal user. Not supported when run as root.
+	exit 1
+fi
+
+#
+# Force the permissions of the files we create...
+#
+
+umask 022
+
+#
 # Make the IPP test program...
 #
 
 make
 
 #
+# Solaris has a non-POSIX grep in /bin...
+#
+
+if test -x /usr/xpg4/bin/grep; then
+	GREP=/usr/xpg4/bin/grep
+else
+	GREP=grep
+fi
+
+#
 # Figure out the proper echo options...
 #
 
-if (echo "testing\c"; echo 1,2,3) | grep c >/dev/null; then
+if (echo "testing\c"; echo 1,2,3) | $GREP c >/dev/null; then
         ac_n=-n
         ac_c=
 else
@@ -193,12 +218,54 @@ echo ""
 
 case "$usevalgrind" in
 	Y* | y*)
-		valgrind="valgrind --tool=memcheck --log-file=/tmp/cups-$user/log/valgrind.%p --error-limit=no --leak-check=yes --trace-children=yes --read-var-info=yes"
+		VALGRIND="valgrind --tool=memcheck --log-file=/tmp/cups-$user/log/valgrind.%p --error-limit=no --leak-check=yes --trace-children=yes --read-var-info=yes"
+		if test `uname` = Darwin; then
+			VALGRIND="$VALGRIND --dsymutil=yes"
+		fi
+		export VALGRIND
 		echo "Using Valgrind; log files can be found in /tmp/cups-$user/log..."
 		;;
 
 	*)
-		valgrind=""
+		VALGRIND=""
+		export VALGRIND
+		;;
+esac
+
+#
+# See if we want to do debug logging of the libraries...
+#
+
+echo ""
+echo "If CUPS was built with the --enable-debug-printfs configure option, you"
+echo "can enable debug logging of the libraries."
+echo ""
+echo $ac_n "Enter Y or a number from 0 to 9 to enable debug logging or N to not: [N] $ac_c"
+
+if test $# -gt 0; then
+	usedebugprintfs=$1
+	shift
+else
+	read usedebugprintfs
+fi
+echo ""
+
+case "$usedebugprintfs" in
+	Y* | y*)
+		echo "Enabling debug printfs; log files can be found in /tmp/cups-$user/log..."
+		CUPS_DEBUG_LOG="/tmp/cups-$user/log/debug_printfs.%d"; export CUPS_DEBUG_LOG
+		CUPS_DEBUG_LEVEL=5; export CUPS_DEBUG_LEVEL
+		CUPS_DEBUG_FILTER='^(http|_http|ipp|_ipp|cups.*Request|cupsGetResponse|cupsSend).*$'; export CUPS_DEBUG_FILTER
+		;;
+
+	0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9)
+		echo "Enabling debug printfs; log files can be found in /tmp/cups-$user/log..."
+		CUPS_DEBUG_LOG="/tmp/cups-$user/log/debug_printfs.%d"; export CUPS_DEBUG_LOG
+		CUPS_DEBUG_LEVEL=$usedebugprintf; export CUPS_DEBUG_LEVEL
+		CUPS_DEBUG_FILTER='^(http|_http|ipp|_ipp|cups.*Request|cupsGetResponse|cupsSend).*$'; export CUPS_DEBUG_FILTER
+		;;
+
+	*)
 		;;
 esac
 
@@ -240,8 +307,7 @@ ln -s $root/backend/http /tmp/cups-$user/bin/backend
 ln -s $root/backend/ipp /tmp/cups-$user/bin/backend
 ln -s $root/backend/lpd /tmp/cups-$user/bin/backend
 ln -s $root/backend/mdns /tmp/cups-$user/bin/backend
-ln -s $root/backend/parallel /tmp/cups-$user/bin/backend
-ln -s $root/backend/serial /tmp/cups-$user/bin/backend
+ln -s $root/backend/pseudo /tmp/cups-$user/bin/backend
 ln -s $root/backend/snmp /tmp/cups-$user/bin/backend
 ln -s $root/backend/socket /tmp/cups-$user/bin/backend
 ln -s $root/backend/usb /tmp/cups-$user/bin/backend
@@ -249,14 +315,13 @@ ln -s $root/cgi-bin /tmp/cups-$user/bin
 ln -s $root/monitor /tmp/cups-$user/bin
 ln -s $root/notifier /tmp/cups-$user/bin
 ln -s $root/scheduler /tmp/cups-$user/bin/daemon
-ln -s $root/filter/bannertops /tmp/cups-$user/bin/filter
 ln -s $root/filter/commandtops /tmp/cups-$user/bin/filter
 ln -s $root/filter/gziptoany /tmp/cups-$user/bin/filter
-ln -s $root/filter/hpgltops /tmp/cups-$user/bin/filter
 ln -s $root/filter/pstops /tmp/cups-$user/bin/filter
 ln -s $root/filter/rastertoepson /tmp/cups-$user/bin/filter
 ln -s $root/filter/rastertohp /tmp/cups-$user/bin/filter
-ln -s $root/filter/texttops /tmp/cups-$user/bin/filter
+ln -s $root/filter/rastertolabel /tmp/cups-$user/bin/filter
+ln -s $root/filter/rastertopwg /tmp/cups-$user/bin/filter
 
 ln -s $root/data/classified /tmp/cups-$user/share/banners
 ln -s $root/data/confidential /tmp/cups-$user/share/banners
@@ -264,10 +329,7 @@ ln -s $root/data/secret /tmp/cups-$user/share/banners
 ln -s $root/data/standard /tmp/cups-$user/share/banners
 ln -s $root/data/topsecret /tmp/cups-$user/share/banners
 ln -s $root/data/unclassified /tmp/cups-$user/share/banners
-ln -s $root/data /tmp/cups-$user/share/charmaps
-ln -s $root/data /tmp/cups-$user/share/charsets
 ln -s $root/data /tmp/cups-$user/share
-ln -s $root/fonts /tmp/cups-$user/share
 ln -s $root/ppdc/sample.drv /tmp/cups-$user/share/drv
 ln -s $root/conf/mime.types /tmp/cups-$user/share/mime
 ln -s $root/conf/mime.convs /tmp/cups-$user/share/mime
@@ -275,13 +337,8 @@ ln -s $root/data/*.h /tmp/cups-$user/share/ppdc
 ln -s $root/data/*.defs /tmp/cups-$user/share/ppdc
 ln -s $root/templates /tmp/cups-$user/share
 
-if test $ssltype != 0; then
-	mkdir $root/ssl
-	cp server.* $root/ssl
-fi
-
 #
-# Mac OS X filters and configuration files...
+# Local filters and configuration files...
 #
 
 if test `uname` = Darwin; then
@@ -295,6 +352,8 @@ if test `uname` = Darwin; then
 	ln -s /usr/libexec/cups/filter/pstoappleps /tmp/cups-$user/bin/filter
 	ln -s /usr/libexec/cups/filter/pstocupsraster /tmp/cups-$user/bin/filter
 	ln -s /usr/libexec/cups/filter/pstopdffilter /tmp/cups-$user/bin/filter
+	ln -s /usr/libexec/cups/filter/rastertourf /tmp/cups-$user/bin/filter
+	ln -s /usr/libexec/cups/filter/xhtmltopdf /tmp/cups-$user/bin/filter
 
 	if test -f /private/etc/cups/apple.types; then
 		ln -s /private/etc/cups/apple.* /tmp/cups-$user/share/mime
@@ -302,9 +361,18 @@ if test `uname` = Darwin; then
 		ln -s /usr/share/cups/mime/apple.* /tmp/cups-$user/share/mime
 	fi
 else
-	ln -s $root/filter/imagetops /tmp/cups-$user/bin/filter
-	ln -s $root/filter/imagetoraster /tmp/cups-$user/bin/filter
-	ln -s $root/filter/pdftops /tmp/cups-$user/bin/filter
+	ln -s /usr/lib/cups/filter/bannertops /tmp/cups-$user/bin/filter
+	ln -s /usr/lib/cups/filter/imagetops /tmp/cups-$user/bin/filter
+	ln -s /usr/lib/cups/filter/imagetoraster /tmp/cups-$user/bin/filter
+	ln -s /usr/lib/cups/filter/pdftops /tmp/cups-$user/bin/filter
+	ln -s /usr/lib/cups/filter/texttops /tmp/cups-$user/bin/filter
+
+	ln -s /usr/share/cups/mime/legacy.convs /tmp/cups-$user/share/mime
+	ln -s /usr/share/cups/charsets /tmp/cups-$user/share
+	if test -f $root/data/psglyphs; then
+		ln -s /usr/share/cups/data/psglyphs $root/data
+	fi
+	ln -s /usr/share/cups/fonts /tmp/cups-$user/share
 fi
 
 #
@@ -320,10 +388,28 @@ else
 fi
 
 cat >/tmp/cups-$user/cupsd.conf <<EOF
+StrictConformance Yes
 Browsing Off
+Listen localhost:$port
+PassEnv LOCALEDIR
+PassEnv DYLD_INSERT_LIBRARIES
+MaxSubscriptions 3
+MaxLogSize 0
+AccessLogLevel actions
+LogLevel debug2
+LogTimeFormat usecs
+PreserveJobHistory Yes
+<Policy default>
+<Limit All>
+Order Allow,Deny
+$encryption
+</Limit>
+</Policy>
+EOF
+
+cat >/tmp/cups-$user/cups-files.conf <<EOF
 FileDevice yes
 Printcap
-Listen 127.0.0.1:$port
 User $user
 ServerRoot /tmp/cups-$user
 StateDir /tmp/cups-$user
@@ -331,27 +417,12 @@ ServerBin /tmp/cups-$user/bin
 CacheDir /tmp/cups-$user/share
 DataDir /tmp/cups-$user/share
 FontPath /tmp/cups-$user/share/fonts
-PassEnv LOCALEDIR
 DocumentRoot $root/doc
 RequestRoot /tmp/cups-$user/spool
 TempDir /tmp/cups-$user/spool/temp
-MaxSubscriptions 3
-MaxLogSize 0
 AccessLog /tmp/cups-$user/log/access_log
 ErrorLog /tmp/cups-$user/log/error_log
 PageLog /tmp/cups-$user/log/page_log
-AccessLogLevel actions
-LogLevel debug2
-LogTimeFormat usecs
-PreserveJobHistory Yes
-<Policy default>
-<Limit All>
-Order Deny,Allow
-Deny from all
-Allow from 127.0.0.1
-$encryption
-</Limit>
-</Policy>
 EOF
 
 #
@@ -408,35 +479,36 @@ fi
 echo "Setting up environment variables for test..."
 
 if test "x$LD_LIBRARY_PATH" = x; then
-	LD_LIBRARY_PATH="$root/cups:$root/filter:$root/cgi-bin:$root/scheduler:$root/driver:$root/ppdc"
+	LD_LIBRARY_PATH="$root/cups:$root/filter:$root/cgi-bin:$root/scheduler:$root/ppdc"
 else
-	LD_LIBRARY_PATH="$root/cups:$root/filter:$root/cgi-bin:$root/scheduler:$root/driver:$root/ppdc:$LD_LIBRARY_PATH"
+	LD_LIBRARY_PATH="$root/cups:$root/filter:$root/cgi-bin:$root/scheduler:$root/ppdc:$LD_LIBRARY_PATH"
 fi
 
 export LD_LIBRARY_PATH
 
-LD_PRELOAD="$root/cups/libcups.so.2:$root/filter/libcupsimage.so.2:$root/cgi-bin/libcupscgi.so.1:$root/scheduler/libcupsmime.so.1:$root/driver/libcupsdriver.so.1:$root/ppdc/libcupsppdc.so.1"
+LD_PRELOAD="$root/cups/libcups.so.2:$root/filter/libcupsimage.so.2:$root/cgi-bin/libcupscgi.so.1:$root/scheduler/libcupsmime.so.1:$root/ppdc/libcupsppdc.so.1"
 if test `uname` = SunOS -a -r /usr/lib/libCrun.so.1; then
 	LD_PRELOAD="/usr/lib/libCrun.so.1:$LD_PRELOAD"
 fi
 export LD_PRELOAD
 
 if test "x$DYLD_LIBRARY_PATH" = x; then
-	DYLD_LIBRARY_PATH="$root/cups:$root/filter:$root/cgi-bin:$root/scheduler:$root/driver:$root/ppdc"
+	DYLD_LIBRARY_PATH="$root/cups:$root/filter:$root/cgi-bin:$root/scheduler:$root/ppdc"
 else
-	DYLD_LIBRARY_PATH="$root/cups:$root/filter:$root/cgi-bin:$root/scheduler:$root/driver:$root/ppdc:$DYLD_LIBRARY_PATH"
+	DYLD_LIBRARY_PATH="$root/cups:$root/filter:$root/cgi-bin:$root/scheduler:$root/ppdc:$DYLD_LIBRARY_PATH"
 fi
 
 export DYLD_LIBRARY_PATH
 
 if test "x$SHLIB_PATH" = x; then
-	SHLIB_PATH="$root/cups:$root/filter:$root/cgi-bin:$root/scheduler:$root/driver:$root/ppdc"
+	SHLIB_PATH="$root/cups:$root/filter:$root/cgi-bin:$root/scheduler:$root/ppdc"
 else
-	SHLIB_PATH="$root/cups:$root/filter:$root/cgi-bin:$root/scheduler:$root/driver:$root/ppdc:$SHLIB_PATH"
+	SHLIB_PATH="$root/cups:$root/filter:$root/cgi-bin:$root/scheduler:$root/ppdc:$SHLIB_PATH"
 fi
 
 export SHLIB_PATH
 
+CUPS_DISABLE_APPLE_DEFAULT=yes; export CUPS_DISABLE_APPLE_DEFAULT
 CUPS_SERVER=localhost:8631; export CUPS_SERVER
 CUPS_SERVERROOT=/tmp/cups-$user; export CUPS_SERVERROOT
 CUPS_STATEDIR=/tmp/cups-$user; export CUPS_STATEDIR
@@ -457,19 +529,22 @@ export HOME
 LANG=C
 export LANG
 
+LC_MESSAGES=C
+export LC_MESSAGES
+
 #
 # Start the server; run as foreground daemon in the background...
 #
 
 echo "Starting scheduler:"
-echo "    $valgrind ../scheduler/cupsd -c /tmp/cups-$user/cupsd.conf -f >/tmp/cups-$user/log/debug_log 2>&1 &"
+echo "    $VALGRIND ../scheduler/cupsd -c /tmp/cups-$user/cupsd.conf -f >/tmp/cups-$user/log/debug_log 2>&1 &"
 echo ""
 
-if test `uname` = Darwin -a "x$valgrind" = x; then
-	DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib \
-	$valgrind ../scheduler/cupsd -c /tmp/cups-$user/cupsd.conf -f >/tmp/cups-$user/log/debug_log 2>&1 &
+if test `uname` = Darwin -a "x$VALGRIND" = x; then
+	DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib
+	../scheduler/cupsd -c /tmp/cups-$user/cupsd.conf -f >/tmp/cups-$user/log/debug_log 2>&1 &
 else
-	$valgrind ../scheduler/cupsd -c /tmp/cups-$user/cupsd.conf -f >/tmp/cups-$user/log/debug_log 2>&1 &
+	$VALGRIND ../scheduler/cupsd -c /tmp/cups-$user/cupsd.conf -f >/tmp/cups-$user/log/debug_log 2>&1 &
 fi
 
 cupsd=$!
@@ -533,7 +608,7 @@ done
 #
 
 date=`date "+%Y-%m-%d"`
-strfile=/tmp/cups-$user/cups-str-1.4-$date-$user.html
+strfile=/tmp/cups-$user/cups-str-1.6-$date-$user.html
 
 rm -f $strfile
 cat str-header.html >$strfile
@@ -552,16 +627,25 @@ echo `date "+%Y-%m-%d"` by $user on `hostname`. >>$strfile
 echo "<PRE>" >>$strfile
 
 fail=0
-for file in 4*.test; do
-	echo "Performing $file..."
+for file in 4*.test ipp-2.1.test; do
+	echo $ac_n "Performing $file: $ac_c"
 	echo "" >>$strfile
 
-	./ipptest ipp://localhost:$port/printers $file | tee -a $strfile
+	if test $file = ipp-2.1.test; then
+		uri="ipp://localhost:$port/printers/Test1"
+		options="-V 2.1 -d NOPRINT=1 -f testfile.ps"
+	else
+		uri="ipp://localhost:$port/printers"
+		options=""
+	fi
+	$VALGRIND ./ipptool -tI $options $uri $file >> $strfile
 	status=$?
 
 	if test $status != 0; then
-		echo Test failed.
+		echo FAIL
 		fail=`expr $fail + 1`
+	else
+		echo PASS
 	fi
 done
 
@@ -581,16 +665,18 @@ echo $date by $user on `hostname`. >>$strfile
 echo "<PRE>" >>$strfile
 
 for file in 5*.sh; do
-	echo "Performing $file..."
+	echo $ac_n "Performing $file: $ac_c"
 	echo "" >>$strfile
 	echo "\"$file\":" >>$strfile
 
-	sh $file $pjobs $pprinters | tee -a $strfile
+	sh $file $pjobs $pprinters >> $strfile
 	status=$?
 
 	if test $status != 0; then
-		echo Test failed.
+		echo FAIL
 		fail=`expr $fail + 1`
+	else
+		echo PASS
 	fi
 done
 
@@ -616,8 +702,20 @@ echo "Test Summary"
 echo ""
 echo "<H2>Summary</H2>" >>$strfile
 
+# Job control files
+count=`ls -1 /tmp/cups-$user/spool | wc -l`
+count=`expr $count - 1`
+if test $count != 0; then
+	echo "FAIL: $count job control files were not purged."
+	echo "<P>FAIL: $count job control files were not purged.</P>" >>$strfile
+	fail=`expr $fail + 1`
+else
+	echo "PASS: All job control files purged."
+	echo "<P>PASS: All job control files purged.</P>" >>$strfile
+fi
+
 # Pages printed on Test1 (within 1 page for timing-dependent cancel issues)
-count=`grep '^Test1 ' /tmp/cups-$user/log/page_log | awk 'BEGIN{count=0}{count=count+$7}END{print count}'`
+count=`$GREP '^Test1 ' /tmp/cups-$user/log/page_log | awk 'BEGIN{count=0}{count=count+$7}END{print count}'`
 expected=`expr $pjobs \* 2 + 34`
 expected2=`expr $expected + 2`
 if test $count -lt $expected -a $count -gt $expected2; then
@@ -630,7 +728,7 @@ else
 fi
 
 # Paged printed on Test2
-count=`grep '^Test2 ' /tmp/cups-$user/log/page_log | awk 'BEGIN{count=0}{count=count+$7}END{print count}'`
+count=`$GREP '^Test2 ' /tmp/cups-$user/log/page_log | awk 'BEGIN{count=0}{count=count+$7}END{print count}'`
 expected=`expr $pjobs \* 2 + 3`
 if test $count != $expected; then
 	echo "FAIL: Printer 'Test2' produced $count page(s), expected $expected."
@@ -641,9 +739,21 @@ else
 	echo "<P>PASS: Printer 'Test2' correctly produced $count page(s).</P>" >>$strfile
 fi
 
+# Paged printed on Test3
+count=`$GREP '^Test3 ' /tmp/cups-$user/log/page_log | grep -v total | awk 'BEGIN{count=0}{count=count+$7}END{print count}'`
+expected=2
+if test $count != $expected; then
+	echo "FAIL: Printer 'Test3' produced $count page(s), expected $expected."
+	echo "<P>FAIL: Printer 'Test3' produced $count page(s), expected $expected.</P>" >>$strfile
+	fail=`expr $fail + 1`
+else
+	echo "PASS: Printer 'Test3' correctly produced $count page(s)."
+	echo "<P>PASS: Printer 'Test3' correctly produced $count page(s).</P>" >>$strfile
+fi
+
 # Requests logged
 count=`wc -l /tmp/cups-$user/log/access_log | awk '{print $1}'`
-expected=`expr 39 + 18 + $pjobs \* 8 + $pprinters \* $pjobs \* 4`
+expected=`expr 37 + 18 + 28 + $pjobs \* 8 + $pprinters \* $pjobs \* 4`
 if test $count != $expected; then
 	echo "FAIL: $count requests logged, expected $expected."
 	echo "<P>FAIL: $count requests logged, expected $expected.</P>" >>$strfile
@@ -654,11 +764,11 @@ else
 fi
 
 # Did CUPS-Get-Default get logged?
-if grep -q CUPS-Get-Default /tmp/cups-$user/log/access_log; then
+if $GREP -q CUPS-Get-Default /tmp/cups-$user/log/access_log; then
 	echo "FAIL: CUPS-Get-Default logged with 'AccessLogLevel actions'"
 	echo "<P>FAIL: CUPS-Get-Default logged with 'AccessLogLevel actions'</P>" >>$strfile
 	echo "<PRE>" >>$strfile
-	grep CUPS-Get-Default /tmp/cups-$user/log/access_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
+	$GREP CUPS-Get-Default /tmp/cups-$user/log/access_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
 	echo "</PRE>" >>$strfile
 	fail=`expr $fail + 1`
 else
@@ -667,13 +777,13 @@ else
 fi
 
 # Emergency log messages
-count=`grep '^X ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
+count=`$GREP '^X ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
 if test $count != 0; then
 	echo "FAIL: $count emergency messages, expected 0."
-	grep '^X ' /tmp/cups-$user/log/error_log
+	$GREP '^X ' /tmp/cups-$user/log/error_log
 	echo "<P>FAIL: $count emergency messages, expected 0.</P>" >>$strfile
 	echo "<PRE>" >>$strfile
-	grep '^X ' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
+	$GREP '^X ' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
 	echo "</PRE>" >>$strfile
 	fail=`expr $fail + 1`
 else
@@ -682,13 +792,13 @@ else
 fi
 
 # Alert log messages
-count=`grep '^A ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
+count=`$GREP '^A ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
 if test $count != 0; then
 	echo "FAIL: $count alert messages, expected 0."
-	grep '^A ' /tmp/cups-$user/log/error_log
+	$GREP '^A ' /tmp/cups-$user/log/error_log
 	echo "<P>FAIL: $count alert messages, expected 0.</P>" >>$strfile
 	echo "<PRE>" >>$strfile
-	grep '^A ' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
+	$GREP '^A ' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
 	echo "</PRE>" >>$strfile
 	fail=`expr $fail + 1`
 else
@@ -697,13 +807,13 @@ else
 fi
 
 # Critical log messages
-count=`grep '^C ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
+count=`$GREP '^C ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
 if test $count != 0; then
 	echo "FAIL: $count critical messages, expected 0."
-	grep '^C ' /tmp/cups-$user/log/error_log
+	$GREP '^C ' /tmp/cups-$user/log/error_log
 	echo "<P>FAIL: $count critical messages, expected 0.</P>" >>$strfile
 	echo "<PRE>" >>$strfile
-	grep '^C ' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
+	$GREP '^C ' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
 	echo "</PRE>" >>$strfile
 	fail=`expr $fail + 1`
 else
@@ -712,13 +822,13 @@ else
 fi
 
 # Error log messages
-count=`grep '^E ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
-if test $count != 18; then
-	echo "FAIL: $count error messages, expected 18."
-	grep '^E ' /tmp/cups-$user/log/error_log
-	echo "<P>FAIL: $count error messages, expected 18.</P>" >>$strfile
+count=`$GREP '^E ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
+if test $count != 33; then
+	echo "FAIL: $count error messages, expected 33."
+	$GREP '^E ' /tmp/cups-$user/log/error_log
+	echo "<P>FAIL: $count error messages, expected 33.</P>" >>$strfile
 	echo "<PRE>" >>$strfile
-	grep '^E ' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
+	$GREP '^E ' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
 	echo "</PRE>" >>$strfile
 	fail=`expr $fail + 1`
 else
@@ -727,13 +837,13 @@ else
 fi
 
 # Warning log messages
-count=`grep '^W ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
-if test $count != 0; then
-	echo "FAIL: $count warning messages, expected 0."
-	grep '^W ' /tmp/cups-$user/log/error_log
-	echo "<P>FAIL: $count warning messages, expected 0.</P>" >>$strfile
+count=`$GREP '^W ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
+if test $count != 9; then
+	echo "FAIL: $count warning messages, expected 9."
+	$GREP '^W ' /tmp/cups-$user/log/error_log
+	echo "<P>FAIL: $count warning messages, expected 9.</P>" >>$strfile
 	echo "<PRE>" >>$strfile
-	grep '^W ' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
+	$GREP '^W ' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
 	echo "</PRE>" >>$strfile
 	fail=`expr $fail + 1`
 else
@@ -742,13 +852,13 @@ else
 fi
 
 # Notice log messages
-count=`grep '^N ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
+count=`$GREP '^N ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
 if test $count != 0; then
 	echo "FAIL: $count notice messages, expected 0."
-	grep '^N ' /tmp/cups-$user/log/error_log
+	$GREP '^N ' /tmp/cups-$user/log/error_log
 	echo "<P>FAIL: $count notice messages, expected 0.</P>" >>$strfile
 	echo "<PRE>" >>$strfile
-	grep '^N ' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
+	$GREP '^N ' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
 	echo "</PRE>" >>$strfile
 	fail=`expr $fail + 1`
 else
@@ -757,7 +867,7 @@ else
 fi
 
 # Info log messages
-count=`grep '^I ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
+count=`$GREP '^I ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
 if test $count = 0; then
 	echo "FAIL: $count info messages, expected more than 0."
 	echo "<P>FAIL: $count info messages, expected more than 0.</P>" >>$strfile
@@ -768,7 +878,7 @@ else
 fi
 
 # Debug log messages
-count=`grep '^D ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
+count=`$GREP '^D ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
 if test $count = 0; then
 	echo "FAIL: $count debug messages, expected more than 0."
 	echo "<P>FAIL: $count debug messages, expected more than 0.</P>" >>$strfile
@@ -779,7 +889,7 @@ else
 fi
 
 # Debug2 log messages
-count=`grep '^d ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
+count=`$GREP '^d ' /tmp/cups-$user/log/error_log | wc -l | awk '{print $1}'`
 if test $count = 0; then
 	echo "FAIL: $count debug2 messages, expected more than 0."
 	echo "<P>FAIL: $count debug2 messages, expected more than 0.</P>" >>$strfile
@@ -787,16 +897,6 @@ if test $count = 0; then
 else
 	echo "PASS: $count debug2 messages."
 	echo "<P>PASS: $count debug2 messages.</P>" >>$strfile
-fi
-
-# Page log file...
-if grep -iq 'testfile.pdf na_letter_8.5x11in' /tmp/cups-$user/log/page_log; then
-	echo "PASS: page_log formatted correctly."
-	echo "<P>PASS: page_log formatted correctly.</P>" >>$strfile
-else
-	echo "FAIL: page_log formatted incorrectly."
-	echo "<P>FAIL: page_log formatted incorrectly.</P>" >>$strfile
-	fail=`expr $fail + 1`
 fi
 
 # Log files...
@@ -807,7 +907,7 @@ echo "</PRE>" >>$strfile
 
 echo "<H2>error_log</H2>" >>$strfile
 echo "<PRE>" >>$strfile
-grep -v '^[dD]' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
+$GREP -v '^d' /tmp/cups-$user/log/error_log | sed -e '1,$s/&/&amp;/g' -e '1,$s/</&lt;/g' >>$strfile
 echo "</PRE>" >>$strfile
 
 echo "<H2>page_log</H2>" >>$strfile
@@ -844,5 +944,5 @@ if test $fail != 0; then
 fi
 
 #
-# End of "$Id: run-stp-tests.sh 8783 2009-08-28 17:51:05Z mike $"
+# End of "$Id: run-stp-tests.sh 9034 2010-03-09 07:03:06Z mike $"
 #

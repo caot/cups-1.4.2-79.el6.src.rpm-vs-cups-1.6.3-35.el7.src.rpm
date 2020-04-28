@@ -1,9 +1,9 @@
 #
-# "$Id: Makefile 8841 2009-10-07 16:24:25Z mike $"
+# "$Id: Makefile 7941 2008-09-16 00:46:13Z mike $"
 #
-#   Documentation makefile for the Common UNIX Printing System (CUPS).
+#   Documentation makefile for CUPS.
 #
-#   Copyright 2007-2009 by Apple Inc.
+#   Copyright 2007-2012 by Apple Inc.
 #   Copyright 1997-2007 by Easy Software Products.
 #
 #   These coded instructions, statements, and computer programs are the
@@ -28,6 +28,7 @@ WEBIMAGES	=	\
 			images/color-wheel.png \
 			images/cups.png \
 			images/cups-icon.png \
+			images/generic.png \
 			images/left.gif \
 			images/right.gif \
 			images/sel.gif \
@@ -39,6 +40,8 @@ HELPIMAGES	=	\
 			images/cups-postscript-chain.png \
 			images/cups-raster-chain.png \
 			images/raster.png \
+			images/raster-organization.png \
+			images/sample-image.png \
 			images/smiley.jpg
 HELPFILES	=	\
 			help/accounting.html \
@@ -63,14 +66,15 @@ HELPFILES	=	\
 			help/man-cancel.html \
 			help/man-cups-config.html \
 			help/man-cups-lpd.html \
-			help/man-cups-polld.html \
+			help/man-cups-snmp.html \
 			help/man-cupsaddsmb.html \
 			help/man-cupsd.html \
 			help/man-cupsenable.html \
 			help/man-cupstestdsc.html \
 			help/man-cupstestppd.html \
-			help/man-drv.html \
 			help/man-filter.html \
+			help/man-ipptool.html \
+			help/man-ipptoolfile.html \
 			help/man-lp.html \
 			help/man-lpadmin.html \
 			help/man-lpc.html \
@@ -101,6 +105,7 @@ HELPFILES	=	\
 			help/ref-classes-conf.html \
 			help/ref-client-conf.html \
 			help/ref-cupsd-conf.html \
+			help/ref-cups-files-conf.html \
 			help/ref-error_log.html \
 			help/ref-mailto-conf.html \
 			help/ref-page_log.html \
@@ -195,6 +200,8 @@ install-languages:
 		fi; \
 	done
 
+install-langbundle:
+
 
 #
 # Install programs...
@@ -241,6 +248,8 @@ uninstall-languages:
 		$(RM) $(DOCDIR)/$$lang/cups.css; \
 		$(RMDIR) $(DOCDIR)/$$lang; \
 	done
+
+install-langbundle:
 
 
 #

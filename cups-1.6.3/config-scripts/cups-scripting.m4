@@ -1,9 +1,9 @@
 dnl
 dnl "$Id: cups-scripting.m4 7915 2008-09-07 22:18:29Z mike $"
 dnl
-dnl   Scripting configuration stuff for the Common UNIX Printing System (CUPS).
+dnl   Scripting configuration stuff for CUPS.
 dnl
-dnl   Copyright 2007-2008 by Apple Inc.
+dnl   Copyright 2007-2010 by Apple Inc.
 dnl   Copyright 1997-2006 by Easy Software Products, all rights reserved.
 dnl
 dnl   These coded instructions, statements, and computer programs are the
@@ -67,17 +67,6 @@ if test "x$CUPS_PHP" = x; then
 else
 	AC_DEFINE(HAVE_PHP)
 fi
-
-PHPDIR=""
-if test "x$CUPS_PHP" != xno; then
-	AC_PATH_PROG(PHPCONFIG, php-config)
-
-	if test "x$PHPCONFIG" != x; then
-		PHPDIR="scripting/php"
-	fi
-fi
-
-AC_SUBST(PHPDIR)
 
 dnl Do we have Python?
 AC_ARG_WITH(python, [  --with-python           set Python interpreter for web interfaces ],

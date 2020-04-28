@@ -1,13 +1,9 @@
 dnl
-dnl "$Id: cups-dnssd.m4 8789 2009-08-28 22:54:34Z mike $"
+dnl "$Id: cups-dnssd.m4 7890 2008-08-29 22:19:39Z mike $"
 dnl
-dnl   DNS Service Discovery (aka Bonjour) stuff for the Common UNIX Printing System (CUPS).
+dnl   DNS Service Discovery (aka Bonjour) stuff for CUPS.
 dnl
-dnl   http://www.dns-sd.org
-dnl   http://www.multicastdns.org/
-dnl   http://developer.apple.com/networking/bonjour/
-dnl
-dnl   Copyright 2007-2009 by Apple Inc.
+dnl   Copyright 2007-2012 by Apple Inc.
 dnl
 dnl   These coded instructions, statements, and computer programs are the
 dnl   property of Apple Inc. and are protected by Federal copyright
@@ -16,7 +12,8 @@ dnl   which should have been included with this file.  If this file is
 dnl   file is missing or damaged, see the license at "http://www.cups.org/".
 dnl
 
-AC_ARG_ENABLE(dnssd, [  --disable-dnssd         disable DNS Service Discovery support])
+AC_ARG_ENABLE(avahi, [  --disable-avahi         disable DNS Service Discovery support using Avahi])
+AC_ARG_ENABLE(dnssd, [  --disable-dnssd         disable DNS Service Discovery support using mDNSResponder])
 AC_ARG_WITH(dnssd-libs, [  --with-dnssd-libs       set directory for DNS Service Discovery library],
 	LDFLAGS="-L$withval $LDFLAGS"
 	DSOFLAGS="-L$withval $DSOFLAGS",)
@@ -27,14 +24,25 @@ AC_ARG_WITH(dnssd-includes, [  --with-dnssd-includes   set directory for DNS Ser
 DNSSDLIBS=""
 DNSSD_BACKEND=""
 
-if test x$enable_dnssd != xno; then
+if test "x$PKGCONFIG" != x -a x$enable_avahi != xno; then
+	AC_MSG_CHECKING(for Avahi)
+	if $PKGCONFIG --exists avahi-client; then
+		AC_MSG_RESULT(yes)
+		CFLAGS="$CFLAGS `$PKGCONFIG --cflags avahi-client`"
+		DNSSDLIBS="`$PKGCONFIG --libs avahi-client`"
+		DNSSD_BACKEND="dnssd"
+		AC_DEFINE(HAVE_AVAHI)
+	else
+		AC_MSG_RESULT(no)
+	fi
+fi
+
+if test "x$DNSSD_BACKEND" = x -a x$enable_dnssd != xno; then
 	AC_CHECK_HEADER(dns_sd.h, [
 		case "$uname" in
 			Darwin*)
 				# Darwin and MacOS X...
 				AC_DEFINE(HAVE_DNSSD)
-				AC_DEFINE(HAVE_COREFOUNDATION)
-				AC_DEFINE(HAVE_SYSTEMCONFIGURATION)
 				DNSSDLIBS="-framework CoreFoundation -framework SystemConfiguration"
 				DNSSD_BACKEND="dnssd"
 				;;
@@ -64,5 +72,5 @@ AC_SUBST(DNSSDLIBS)
 AC_SUBST(DNSSD_BACKEND)
 
 dnl
-dnl End of "$Id: cups-dnssd.m4 8789 2009-08-28 22:54:34Z mike $".
+dnl End of "$Id: cups-dnssd.m4 7890 2008-08-29 22:19:39Z mike $".
 dnl

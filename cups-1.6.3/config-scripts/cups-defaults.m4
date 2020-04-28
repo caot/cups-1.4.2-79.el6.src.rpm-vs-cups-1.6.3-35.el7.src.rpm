@@ -1,10 +1,9 @@
 dnl
-dnl "$Id: cups-defaults.m4 8841 2009-10-07 16:24:25Z mike $"
+dnl "$Id: cups-defaults.m4 7959 2008-09-17 19:30:58Z mike $"
 dnl
-dnl   Default cupsd configuration settings for the Common UNIX Printing System
-dnl   (CUPS).
+dnl   Default cupsd configuration settings for CUPS.
 dnl
-dnl   Copyright 2007-2009 by Apple Inc.
+dnl   Copyright 2007-2012 by Apple Inc.
 dnl   Copyright 2006-2007 by Easy Software Products, all rights reserved.
 dnl
 dnl   These coded instructions, statements, and computer programs are the
@@ -15,7 +14,7 @@ dnl   file is missing or damaged, see the license at "http://www.cups.org/".
 dnl
 
 dnl Default languages...
-LANGUAGES="`ls -1 locale/cups_*.po | sed -e '1,$s/locale\/cups_//' -e '1,$s/\.po//' | tr '\n' ' '`"
+LANGUAGES="`ls -1 locale/cups_*.po 2>/dev/null | sed -e '1,$s/locale\/cups_//' -e '1,$s/\.po//' | tr '\n' ' '`"
 
 AC_ARG_WITH(languages, [  --with-languages        set installed languages, default=all ],[
 	case "$withval" in
@@ -24,6 +23,21 @@ AC_ARG_WITH(languages, [  --with-languages        set installed languages, defau
 		*) LANGUAGES="$withval" ;;
 	esac])
 AC_SUBST(LANGUAGES)
+
+dnl OS X bundle-based localization support
+AC_ARG_WITH(bundledir, [  --with-bundledir        set OS X localization bundle directory ],
+	CUPS_BUNDLEDIR="$withval",
+	if test "x$uname" = xDarwin -a $uversion -ge 100; then
+		CUPS_BUNDLEDIR="/System/Library/Frameworks/ApplicationServices.framework/Versions/A/Frameworks/PrintCore.framework/Versions/A"
+		LANGUAGES=""
+	else
+		CUPS_BUNDLEDIR=""
+	fi)
+
+AC_SUBST(CUPS_BUNDLEDIR)
+if test "x$CUPS_BUNDLEDIR" != x; then
+	AC_DEFINE_UNQUOTED(CUPS_BUNDLEDIR, "$CUPS_BUNDLEDIR")
+fi
 
 dnl Default ConfigFilePerm
 AC_ARG_WITH(config_file_perm, [  --with-config-file-perm set default ConfigFilePerm value, default=0640],
@@ -35,6 +49,12 @@ AC_ARG_WITH(config_file_perm, [  --with-config-file-perm set default ConfigFileP
 	fi)
 AC_SUBST(CUPS_CONFIG_FILE_PERM)
 AC_DEFINE_UNQUOTED(CUPS_DEFAULT_CONFIG_FILE_PERM, 0$CUPS_CONFIG_FILE_PERM)
+
+dnl Default permissions for cupsd
+AC_ARG_WITH(cupsd_file_perm, [  --with-cupsd-file-perm  set default cupsd permissions, default=0500],
+	CUPS_CUPSD_FILE_PERM="$withval",
+	CUPS_CUPSD_FILE_PERM="500")
+AC_SUBST(CUPS_CUPSD_FILE_PERM)
 
 dnl Default LogFilePerm
 AC_ARG_WITH(log_file_perm, [  --with-log-file-perm    set default LogFilePerm value, default=0644],
@@ -49,7 +69,6 @@ AC_ARG_WITH(fatal_errors, [  --with-fatal-errors     set default FatalErrors val
 	CUPS_FATAL_ERRORS="config")
 AC_SUBST(CUPS_FATAL_ERRORS)
 AC_DEFINE_UNQUOTED(CUPS_DEFAULT_FATAL_ERRORS, "$CUPS_FATAL_ERRORS")
-
 
 dnl Default LogLevel
 AC_ARG_WITH(log_level, [  --with-log-level        set default LogLevel value, default=warn],
@@ -77,16 +96,16 @@ fi
 AC_SUBST(CUPS_BROWSING)
 
 dnl Default BrowseLocalProtocols
-AC_ARG_WITH(local_protocols, [  --with-local-protocols  set default BrowseLocalProtocols, default="CUPS"],
+AC_ARG_WITH(local_protocols, [  --with-local-protocols  set default BrowseLocalProtocols, default=""],
 	default_local_protocols="$withval",
 	default_local_protocols="default")
 
 if test x$with_local_protocols != xno; then
 	if test "x$default_local_protocols" = "xdefault"; then
-		if test "x$DNSSDLIBS" != "x"; then
-		CUPS_BROWSE_LOCAL_PROTOCOLS="CUPS dnssd"
-	else
-		CUPS_BROWSE_LOCAL_PROTOCOLS="CUPS"
+		if test "x$DNSSD_BACKEND" != "x"; then
+			CUPS_BROWSE_LOCAL_PROTOCOLS="dnssd"
+		else
+			CUPS_BROWSE_LOCAL_PROTOCOLS=""
 		fi
 	else
 		CUPS_BROWSE_LOCAL_PROTOCOLS="$default_local_protocols"
@@ -99,41 +118,6 @@ AC_SUBST(CUPS_BROWSE_LOCAL_PROTOCOLS)
 AC_DEFINE_UNQUOTED(CUPS_DEFAULT_BROWSE_LOCAL_PROTOCOLS,
 	"$CUPS_BROWSE_LOCAL_PROTOCOLS")
 
-dnl Default BrowseRemoteProtocols
-AC_ARG_WITH(remote_protocols, [  --with-remote-protocols set default BrowseRemoteProtocols, default="CUPS"],
-	default_remote_protocols="$withval",
-	default_remote_protocols="default")
-
-if test x$with_remote_protocols != xno; then
-	if test "x$default_remote_protocols" = "xdefault"; then
-		if test "$uname" = "Darwin" -a $uversion -ge 90; then
-			CUPS_BROWSE_REMOTE_PROTOCOLS=""
-		else
-			CUPS_BROWSE_REMOTE_PROTOCOLS="CUPS"
-		fi
-	else
-		CUPS_BROWSE_REMOTE_PROTOCOLS="$default_remote_protocols"
-	fi
-else
-	CUPS_BROWSE_REMOTE_PROTOCOLS=""
-fi
-
-AC_SUBST(CUPS_BROWSE_REMOTE_PROTOCOLS)
-AC_DEFINE_UNQUOTED(CUPS_DEFAULT_BROWSE_REMOTE_PROTOCOLS,
-	"$CUPS_BROWSE_REMOTE_PROTOCOLS")
-
-dnl Default BrowseShortNames
-AC_ARG_ENABLE(browse_short, [  --disable-browse-short-names
-			  disable BrowseShortNames by default])
-if test "x$enable_browse_short" = xno; then
-	CUPS_BROWSE_SHORT_NAMES="No"
-	AC_DEFINE_UNQUOTED(CUPS_DEFAULT_BROWSE_SHORT_NAMES, 0)
-else
-	CUPS_BROWSE_SHORT_NAMES="Yes"
-	AC_DEFINE_UNQUOTED(CUPS_DEFAULT_BROWSE_SHORT_NAMES, 1)
-fi
-AC_SUBST(CUPS_BROWSE_SHORT_NAMES)
-
 dnl Default DefaultShared
 AC_ARG_ENABLE(default_shared, [  --disable-default-shared
 			  disable DefaultShared by default])
@@ -145,38 +129,6 @@ else
 	AC_DEFINE_UNQUOTED(CUPS_DEFAULT_DEFAULT_SHARED, 1)
 fi
 AC_SUBST(CUPS_DEFAULT_SHARED)
-
-dnl Default ImplicitClasses
-AC_ARG_ENABLE(implicit, [  --disable-implicit-classes
-                          disable ImplicitClasses by default])
-if test "x$enable_implicit" = xno; then
-	CUPS_IMPLICIT_CLASSES="No"
-	AC_DEFINE_UNQUOTED(CUPS_DEFAULT_IMPLICIT_CLASSES, 0)
-else
-	CUPS_IMPLICIT_CLASSES="Yes"
-	AC_DEFINE_UNQUOTED(CUPS_DEFAULT_IMPLICIT_CLASSES, 1)
-fi
-AC_SUBST(CUPS_IMPLICIT_CLASSES)
-
-dnl Default UseNetworkDefault
-AC_ARG_ENABLE(use_network_default, [  --enable-use-network-default
-                          set UseNetworkDefault to Yes by default])
-if test "x$enable_use_network_default" != xno; then
-	AC_MSG_CHECKING(whether to use network default printers)
-	if test "x$enable_use_network_default" = xyes -o $uname != Darwin; then
-		CUPS_USE_NETWORK_DEFAULT="Yes"
-		AC_DEFINE_UNQUOTED(CUPS_DEFAULT_USE_NETWORK_DEFAULT, 1)
-		AC_MSG_RESULT(yes)
-	else
-		CUPS_USE_NETWORK_DEFAULT="No"
-		AC_DEFINE_UNQUOTED(CUPS_DEFAULT_USE_NETWORK_DEFAULT, 0)
-		AC_MSG_RESULT(no)
-	fi
-else
-	CUPS_USE_NETWORK_DEFAULT="No"
-	AC_DEFINE_UNQUOTED(CUPS_DEFAULT_USE_NETWORK_DEFAULT, 0)
-fi
-AC_SUBST(CUPS_USE_NETWORK_DEFAULT)
 
 dnl Determine the correct username and group for this OS...
 AC_ARG_WITH(cups_user, [  --with-cups-user        set default user for CUPS],
@@ -208,6 +160,10 @@ AC_ARG_WITH(cups_user, [  --with-cups-user        set default user for CUPS],
 		AC_MSG_RESULT(no password file, using "$CUPS_USER")
 	fi)
 
+if test "x$CUPS_USER" = "xroot" -o "x$CUPS_USER" = "x0"; then
+	AC_MSG_ERROR([The default user for CUPS cannot be root!])
+fi
+
 AC_ARG_WITH(cups_group, [  --with-cups-group       set default group for CUPS],
 	CUPS_GROUP="$withval",
 	AC_MSG_CHECKING(for default print group)
@@ -237,6 +193,10 @@ AC_ARG_WITH(cups_group, [  --with-cups-group       set default group for CUPS],
 		CUPS_GROUP="nobody"
 		AC_MSG_RESULT(no group file, using "$CUPS_GROUP")
 	fi)
+
+if test "x$CUPS_GROUP" = "xroot" -o "x$CUPS_GROUP" = "xwheel" -o "x$CUPS_GROUP" = "x0"; then
+	AC_MSG_ERROR([The default group for CUPS cannot be root!])
+fi
 
 AC_ARG_WITH(system_groups, [  --with-system-groups    set default system groups for CUPS],
 	CUPS_SYSTEM_GROUPS="$withval",
@@ -269,8 +229,13 @@ AC_ARG_WITH(system_groups, [  --with-system-groups    set default system groups 
 		fi
 	fi)
 
-
 CUPS_PRIMARY_SYSTEM_GROUP="`echo $CUPS_SYSTEM_GROUPS | awk '{print $1}'`"
+
+for group in $CUPS_SYSTEM_GROUPS; do
+	if test "x$CUPS_GROUP" = "x$group"; then
+		AC_MSG_ERROR([The default system groups cannot contain the default CUPS group!])
+	fi
+done
 
 AC_SUBST(CUPS_USER)
 AC_SUBST(CUPS_GROUP)
@@ -340,6 +305,7 @@ else
 fi
 
 AC_DEFINE_UNQUOTED(CUPS_DEFAULT_LPD_CONFIG_FILE, "$CUPS_DEFAULT_LPD_CONFIG_FILE")
+AC_SUBST(CUPS_DEFAULT_LPD_CONFIG_FILE)
 
 dnl Default SMB config file...
 AC_ARG_WITH(smbconfigfile, [  --with-smbconfigfile    set default SMBConfigFile URI],
@@ -361,6 +327,7 @@ else
 fi
 
 AC_DEFINE_UNQUOTED(CUPS_DEFAULT_SMB_CONFIG_FILE, "$CUPS_DEFAULT_SMB_CONFIG_FILE")
+AC_SUBST(CUPS_DEFAULT_SMB_CONFIG_FILE)
 
 dnl Default MaxCopies value...
 AC_ARG_WITH(max-copies, [  --with-max-copies       set default max copies value, default=9999 ],
@@ -407,33 +374,31 @@ AC_ARG_WITH(ipp-port, [  --with-ipp-port         set port number for IPP, defaul
 AC_SUBST(DEFAULT_IPP_PORT)
 AC_DEFINE_UNQUOTED(CUPS_DEFAULT_IPP_PORT,$DEFAULT_IPP_PORT)
 
-dnl Filters
-AC_ARG_ENABLE(bannertops, [  --enable-bannertops     always build the banner filter ])
-AC_ARG_ENABLE(texttops, [  --enable-texttops       always build the text filter ])
+dnl Web interface...
+AC_ARG_ENABLE(webif, [  --enable-webif          enable the web interface by default, default=no for OS X])
+case "x$enable_webif" in
+	xno)
+		CUPS_WEBIF=No
+		CUPS_DEFAULT_WEBIF=0
+		;;
+	xyes)
+		CUPS_WEBIF=Yes
+		CUPS_DEFAULT_WEBIF=1
+		;;
+	*)
+		if test $uname = Darwin; then
+			CUPS_WEBIF=No
+			CUPS_DEFAULT_WEBIF=0
+		else
+			CUPS_WEBIF=Yes
+			CUPS_DEFAULT_WEBIF=1
+		fi
+		;;
+esac
 
-if test "x$enable_bannertops" = xno; then
-	BANNERTOPS=""
-elif test "x$enable_bannertops" = xyes; then
-	BANNERTOPS="bannertops"
-elif test $uname = Darwin; then
-	BANNERTOPS=""
-else
-	BANNERTOPS="bannertops"
-fi
-
-if test "x$enable_texttops" = xno; then
-	TEXTTOPS=""
-elif test "x$enable_texttops" = xyes; then
-	TEXTTOPS="texttops"
-elif test $uname = Darwin; then
-	TEXTTOPS=""
-else
-	TEXTTOPS="texttops"
-fi
-
-AC_SUBST(BANNERTOPS)
-AC_SUBST(TEXTTOPS)
+AC_SUBST(CUPS_WEBIF)
+AC_DEFINE_UNQUOTED(CUPS_DEFAULT_WEBIF, $CUPS_DEFAULT_WEBIF)
 
 dnl
-dnl End of "$Id: cups-defaults.m4 8841 2009-10-07 16:24:25Z mike $".
+dnl End of "$Id: cups-defaults.m4 7959 2008-09-17 19:30:58Z mike $".
 dnl

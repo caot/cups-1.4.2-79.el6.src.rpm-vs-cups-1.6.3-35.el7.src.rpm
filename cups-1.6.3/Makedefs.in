@@ -1,9 +1,9 @@
 #
-# "$Id: Makedefs.in 8686 2009-05-26 23:27:06Z mike $"
+# "$Id: Makedefs.in 7900 2008-09-03 13:47:57Z mike $"
 #
-#   Common makefile definitions for the Common UNIX Printing System (CUPS).
+#   Common makefile definitions for CUPS.
 #
-#   Copyright 2007-2009 by Apple Inc.
+#   Copyright 2007-2012 by Apple Inc.
 #   Copyright 1997-2007 by Easy Software Products, all rights reserved.
 #
 #   These coded instructions, statements, and computer programs are the
@@ -24,13 +24,12 @@ CHMOD		=	@CHMOD@
 CXX		=	@LIBTOOL@ @CXX@
 DSO		=	@DSO@
 DSOXX		=	@DSOXX@
-HTMLDOC		=	@HTMLDOC@
+GZIP		=	@GZIP@
 INSTALL		=	@INSTALL@
 LD		=	@LD@
 LIBTOOL		=	@LIBTOOL@
 LN		=	@LN@ -sf
 MV		=	@MV@
-PHPCONFIG	=	@PHPCONFIG@
 RANLIB		=	@RANLIB@
 RM		=	@RM@ -f
 RMDIR		=	@RMDIR@
@@ -42,6 +41,7 @@ SHELL		=	/bin/sh
 #
 
 INSTALL_BIN	=	$(LIBTOOL) $(INSTALL) -c -m 555 @INSTALL_STRIP@
+INSTALL_COMPDATA =	$(INSTALL) -c -m 444 @INSTALL_GZIP@
 INSTALL_CONFIG	=	$(INSTALL) -c -m @CUPS_CONFIG_FILE_PERM@
 INSTALL_DATA	=	$(INSTALL) -c -m 444
 INSTALL_DIR	=	$(INSTALL) -d
@@ -63,6 +63,7 @@ CUPS_PRIMARY_SYSTEM_GROUP =	@CUPS_PRIMARY_SYSTEM_GROUP@
 #
 
 CUPS_CONFIG_FILE_PERM = @CUPS_CONFIG_FILE_PERM@
+CUPS_CUPSD_FILE_PERM = @CUPS_CUPSD_FILE_PERM@
 CUPS_LOG_FILE_PERM = @CUPS_LOG_FILE_PERM@
 
 #
@@ -79,18 +80,14 @@ UNINSTALL_LANGUAGES =	@UNINSTALL_LANGUAGES@
 
 LIBCUPS		=	@LIBCUPS@
 LIBCUPSCGI	=	@LIBCUPSCGI@
-LIBCUPSDRIVER	=	@LIBCUPSDRIVER@
 LIBCUPSIMAGE	=	@LIBCUPSIMAGE@
 LIBCUPSMIME	=	@LIBCUPSMIME@
 LIBCUPSPPDC	=	@LIBCUPSPPDC@
-LIBJPEG		=	@LIBJPEG@
-LIBLDAP		=	@LIBLDAP@
-LIBMALLOC	=	@LIBMALLOC@
-LIBPAPER	=	@LIBPAPER@
-LIBPNG		=	@LIBPNG@
-LIBSLP		=	@LIBSLP@
+LIBCUPSSTATIC	=	@LIBCUPSSTATIC@
 LIBGSSAPI	=	@LIBGSSAPI@
-LIBTIFF		=	@LIBTIFF@
+LIBMALLOC	=	@LIBMALLOC@
+LIBMXML		=	@LIBMXML@
+LIBPAPER	=	@LIBPAPER@
 LIBUSB		=	@LIBUSB@
 LIBWRAP		=	@LIBWRAP@
 LIBZ		=	@LIBZ@
@@ -102,13 +99,21 @@ LIBZ		=	@LIBZ@
 INSTALLSTATIC	=	@INSTALLSTATIC@
 
 #
+# IPP backend aliases...
+#
+
+IPPALIASES	=	@IPPALIASES@
+
+#
+# Install XPC backends?
+#
+
+INSTALLXPC	=	@INSTALLXPC@
+
+#
 # Program options...
 #
 # ARCHFLAGS     Defines the default architecture build options.
-# ARCH32FLAGS   Defines the 32-bit architecture build options, used
-#               when compiling separate 32/64-bit libraries.
-# ARCH64FLAGS   Defines the 64-bit architecture build options, used
-#               when compiling separate 32/64-bit libraries.
 # OPTIM         Defines the common compiler optimization/debugging options
 #               for all architectures.
 # OPTIONS       Defines other compile-time options (currently only -DDEBUG
@@ -122,10 +127,9 @@ ALL_CXXFLAGS	=	-I.. -D_CUPS_SOURCE $(CXXFLAGS) $(SSLFLAGS) \
 ARCHFLAGS	=	@ARCHFLAGS@
 ARFLAGS		=	@ARFLAGS@
 BACKLIBS	=	@BACKLIBS@
-BANNERTOPS	=	@BANNERTOPS@
+BUILDDIRS	=	@BUILDDIRS@
 CFLAGS		=	@CPPFLAGS@ @CFLAGS@
 COMMONLIBS	=	@LIBS@
-CUPSDLIBS	=	@CUPSDLIBS@
 CXXFLAGS	=	@CPPFLAGS@ @CXXFLAGS@
 CXXLIBS		=	@CXXLIBS@
 DBUS_NOTIFIER	=	@DBUS_NOTIFIER@
@@ -134,51 +138,21 @@ DNSSD_BACKEND	=	@DNSSD_BACKEND@
 DSOFLAGS	=	-L../cups @DSOFLAGS@
 DSOLIBS		=	@DSOLIBS@ $(COMMONLIBS)
 DNSSDLIBS	=	@DNSSDLIBS@
-FONTS		=	@FONTS@
-IMGLIBS		=	@IMGLIBS@
-IMGFILTERS	=	@IMGFILTERS@
 LAUNCHDLIBS	=	@LAUNCHDLIBS@
 LDFLAGS		=	-L../cgi-bin -L../cups -L../filter -L../ppdc \
 			-L../scheduler @LDARCHFLAGS@ \
 			@LDFLAGS@ @RELROFLAGS@ @PIEFLAGS@ $(OPTIM)
-LEGACY_BACKENDS	=	@LEGACY_BACKENDS@
-LIBCUPSORDER	=	@LIBCUPSORDER@
-LIBCUPSIMAGEORDER =	@LIBCUPSIMAGEORDER@
-LINKCUPS	=	@LINKCUPS@ $(SSLLIBS) $(DNSSDLIBS)
+LINKCUPS	=	@LINKCUPS@ $(LIBGSSAPI) $(SSLLIBS) $(DNSSDLIBS) $(LIBZ)
 LINKCUPSIMAGE	=	@LINKCUPSIMAGE@
 LIBS		=	$(LINKCUPS) $(COMMONLIBS)
 OPTIM		=	@OPTIM@
 OPTIONS		=
 PAMLIBS		=	@PAMLIBS@
-PAP		=	@PAP@
-PDFTOPS		=	@PDFTOPS@
-PHPDIR		=	@PHPDIR@
-PHPOPTIONS	=	@PHPOPTIONS@ -I../.. `$(PHPCONFIG) --includes`
+SERVERLIBS	=	@SERVERLIBS@
 SSLFLAGS	=	@SSLFLAGS@
 SSLLIBS		=	@SSLLIBS@
-TEXTTOPS	=	@TEXTTOPS@
 UNITTESTS	=	@UNITTESTS@
 
-
-#
-# Separate 32/64-bit library support...
-#
-
-ARCH32FLAGS	=	@ARCH32FLAGS@
-DSO32FLAGS	=	@DSO32FLAGS@
-INSTALL32	=	@INSTALL32@
-LIB32CUPS	=	@LIB32CUPS@
-LIB32CUPSIMAGE	=	@LIB32CUPSIMAGE@
-LIB32DIR	=	$(BUILDROOT)@LIB32DIR@
-UNINSTALL32	=	@UNINSTALL32@
-
-ARCH64FLAGS	=	@ARCH64FLAGS@
-DSO64FLAGS	=	@DSO64FLAGS@
-INSTALL64	=	@INSTALL64@
-LIB64CUPS	=	@LIB64CUPS@
-LIB64CUPSIMAGE	=	@LIB64CUPSIMAGE@
-LIB64DIR	=	$(BUILDROOT)@LIB64DIR@
-UNINSTALL64	=	@UNINSTALL64@
 
 #
 # Directories...
@@ -207,6 +181,7 @@ localstatedir	=	@localstatedir@
 mandir		=	@mandir@
 oldincludedir	=	@oldincludedir@
 prefix		=	@prefix@
+privateinclude	=	@privateinclude@
 sbindir		=	@sbindir@
 sharedstatedir	=	@sharedstatedir@
 srcdir		=	@srcdir@
@@ -217,6 +192,7 @@ BUILDROOT	=	$(DSTROOT)
 
 AMANDIR		=	$(BUILDROOT)@AMANDIR@
 BINDIR		=	$(BUILDROOT)@bindir@
+BUNDLEDIR	=	@CUPS_BUNDLEDIR@
 CACHEDIR	=	$(BUILDROOT)@CUPS_CACHEDIR@
 DATADIR		=	$(BUILDROOT)@CUPS_DATADIR@
 DOCDIR		=	$(BUILDROOT)@CUPS_DOCROOT@
@@ -230,6 +206,7 @@ LOGDIR		= 	$(BUILDROOT)@CUPS_LOGDIR@
 MANDIR		=	$(BUILDROOT)@mandir@
 MENUDIR		=	@MENUDIR@
 PMANDIR		=	$(BUILDROOT)@PMANDIR@
+PRIVATEINCLUDE	=	$(BUILDROOT)@PRIVATEINCLUDE@
 RCLEVELS	=	@RCLEVELS@
 RCSTART		=	@RCSTART@
 RCSTOP		=	@RCSTOP@
@@ -259,23 +236,15 @@ DBUSDIR		=	@DBUSDIR@
 #
 
 .SILENT:
-.SUFFIXES:	.1 .1.gz .1m .1m.gz .3 .3.gz .5 .5.gz .7 .7.gz .8 .8.gz .a .c .cxx .h .man .o .32.o .64.o .gz
+.SUFFIXES:	.1 .1.gz .1m .1m.gz .3 .3.gz .5 .5.gz .7 .7.gz .8 .8.gz .a .c .cxx .h .man .o .gz
 
 .c.o:
 	echo Compiling $<...
-	$(CC) $(ARCHFLAGS) $(OPTIM) $(ALL_CFLAGS) -c $<
-
-.c.32.o:
-	echo Compiling 32-bit $<...
-	$(CC) $(ARCH32FLAGS) $(OPTIM) $(ALL_CFLAGS) -c -o $@ $<
-
-.c.64.o:
-	echo Compiling 64-bit $<...
-	$(CC) $(ARCH64FLAGS) $(OPTIM) $(ALL_CFLAGS) -c -o $@ $<
+	$(CC) $(ARCHFLAGS) $(OPTIM) $(ALL_CFLAGS) -c -o $@ $<
 
 .cxx.o:
 	echo Compiling $<...
-	$(CXX) $(ARCHFLAGS) $(OPTIM) $(ALL_CXXFLAGS) -c $<
+	$(CXX) $(ARCHFLAGS) $(OPTIM) $(ALL_CXXFLAGS) -c -o $@ $<
 
 .man.1 .man.1m .man.3 .man.5 .man.7 .man.8:
 	echo Linking $<...
@@ -289,5 +258,5 @@ DBUSDIR		=	@DBUSDIR@
 
 
 #
-# End of "$Id: Makedefs.in 8686 2009-05-26 23:27:06Z mike $"
+# End of "$Id: Makedefs.in 7900 2008-09-03 13:47:57Z mike $"
 #

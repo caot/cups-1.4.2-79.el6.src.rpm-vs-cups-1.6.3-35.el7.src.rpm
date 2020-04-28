@@ -1,9 +1,9 @@
 #
-# "$Id: Makefile 8500 2009-04-13 22:53:03Z mike $"
+# "$Id: Makefile 7871 2008-08-27 21:12:43Z mike $"
 #
-#   Berkeley commands makefile for the Common UNIX Printing System (CUPS).
+#   Berkeley commands makefile for CUPS.
 #
-#   Copyright 2007-2009 by Apple Inc.
+#   Copyright 2007-2012 by Apple Inc.
 #   Copyright 1997-2006 by Easy Software Products, all rights reserved.
 #
 #   These coded instructions, statements, and computer programs are the
@@ -54,7 +54,7 @@ clean:
 #
 
 depend:
-	makedepend -Y -I.. -fDependencies $(OBJS:.o=.c) >/dev/null 2>&1
+	$(CC) -MM $(ALL_CFLAGS) $(OBJS:.o=.c) >Dependencies
 
 
 #
@@ -163,5 +163,5 @@ include Dependencies
 
 
 #
-# End of "$Id: Makefile 8500 2009-04-13 22:53:03Z mike $".
+# End of "$Id: Makefile 7871 2008-08-27 21:12:43Z mike $".
 #

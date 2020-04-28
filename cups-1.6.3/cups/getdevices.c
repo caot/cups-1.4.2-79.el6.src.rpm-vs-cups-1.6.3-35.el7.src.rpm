@@ -1,9 +1,9 @@
 /*
- * "$Id: getdevices.c 8627 2009-05-13 21:39:17Z mike $"
+ * "$Id: getdevices.c 3794 2012-04-23 22:44:16Z msweet $"
  *
- *   cupsGetDevices implementation for the Common UNIX Printing System (CUPS).
+ *   cupsGetDevices implementation for CUPS.
  *
- *   Copyright 2008-2009 by Apple Inc.
+ *   Copyright 2008-2012 by Apple Inc.
  *
  *   These coded instructions, statements, and computer programs are the
  *   property of Apple Inc. and are protected by Federal copyright
@@ -22,8 +22,7 @@
  * Include necessary headers...
  */
 
-#include "globals.h"
-#include "debug.h"
+#include "cups-private.h"
 
 
 /*
@@ -35,7 +34,7 @@
  * parameters provide comma-delimited lists of backends to include or omit from
  * the request respectively.
  *
- * @since CUPS 1.4/Mac OS X 10.6@
+ * @since CUPS 1.4/OS X 10.6@
  */
 
 ipp_status_t				/* O - Request status - @code IPP_OK@ on success. */
@@ -258,8 +257,8 @@ cupsGetDevices(
   httpBlocking(http, blocking);
   httpFlush(http);
 
-  if (status == IPP_ERROR)
-    _cupsSetError(IPP_ERROR, NULL, 0);
+  if (status == HTTP_ERROR)
+    _cupsSetError(IPP_INTERNAL_ERROR, strerror(http->error), 0);
   else
   {
     attr = ippFindAttribute(response, "status-message", IPP_TAG_TEXT);
@@ -280,5 +279,5 @@ cupsGetDevices(
 
 
 /*
- * End of "$Id: getdevices.c 8627 2009-05-13 21:39:17Z mike $".
+ * End of "$Id: getdevices.c 3794 2012-04-23 22:44:16Z msweet $".
  */

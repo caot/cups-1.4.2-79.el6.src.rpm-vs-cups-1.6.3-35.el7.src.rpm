@@ -1,9 +1,9 @@
 /*
- * "$Id: ipp-var.c 8859 2009-11-09 23:01:17Z mike $"
+ * "$Id: ipp-var.c 7940 2008-09-16 00:45:16Z mike $"
  *
- *   CGI <-> IPP variable routines for the Common UNIX Printing System (CUPS).
+ *   CGI <-> IPP variable routines for CUPS.
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2012 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -285,10 +285,14 @@ cgiMoveJobs(http_t     *http,		/* I - Connection to server */
 
 
  /*
-  * See who is logged in...
+  * Make sure we have a username...
   */
 
-  user = getenv("REMOTE_USER");
+  if ((user = getenv("REMOTE_USER")) == NULL)
+  {
+    puts("Status: 401\n");
+    exit(0);
+  }
 
  /*
   * See if the user has already selected a new destination...
@@ -333,7 +337,7 @@ cgiMoveJobs(http_t     *http,		/* I - Connection to server */
                    NULL, job_uri);
       ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_KEYWORD,
                    "requested-attributes", NULL, "job-printer-uri");
-      
+
       if ((response = cupsDoRequest(http, request, "/")) != NULL)
       {
         if ((attr = ippFindAttribute(response, "job-printer-uri",
@@ -358,7 +362,7 @@ cgiMoveJobs(http_t     *http,		/* I - Connection to server */
 	*/
 
         cgiStartHTML(cgiText(_("Move Job")));
-	cgiShowIPPError(_("Unable to find destination for job!"));
+	cgiShowIPPError(_("Unable to find destination for job"));
 	cgiEndHTML();
 	return;
       }
@@ -400,7 +404,7 @@ cgiMoveJobs(http_t     *http,		/* I - Connection to server */
         * If the name is not the same as the current destination, add it!
 	*/
 
-        if (strcasecmp(name, dest))
+        if (_cups_strcasecmp(name, dest))
 	{
 	  cgiSetArray("JOB_PRINTER_URI", i, attr->values[0].string.text);
 	  cgiSetArray("JOB_PRINTER_NAME", i, name);
@@ -550,8 +554,8 @@ cgiPrintCommand(http_t     *http,	/* I - Connection to server */
   ipp_t		*request,		/* Get-Job-Attributes request */
 		*response;		/* Get-Job-Attributes response */
   ipp_attribute_t *attr;		/* Current job attribute */
-  static const char const *job_attrs[] =/* Job attributes we want */
-		{
+  static const char * const job_attrs[] =
+		{			/* Job attributes we want */
 		  "job-state",
 		  "job-printer-state-message"
 		};
@@ -591,7 +595,7 @@ cgiPrintCommand(http_t     *http,	/* I - Connection to server */
   if ((job_id = cupsCreateJob(http, dest, title,
 			      1, &hold_option)) < 1)
   {
-    cgiSetVariable("MESSAGE", cgiText(_("Unable to send command to printer driver!")));
+    cgiSetVariable("MESSAGE", cgiText(_("Unable to send command to printer driver")));
     cgiSetVariable("ERROR", cupsLastErrorString());
     cgiStartHTML(title);
     cgiCopyTemplateLang("error.tmpl");
@@ -611,7 +615,7 @@ cgiPrintCommand(http_t     *http,	/* I - Connection to server */
 
   if (cupsLastError() >= IPP_REDIRECTION_OTHER_SITE)
   {
-    cgiSetVariable("MESSAGE", cgiText(_("Unable to send command to printer driver!")));
+    cgiSetVariable("MESSAGE", cgiText(_("Unable to send command to printer driver")));
     cgiSetVariable("ERROR", cupsLastErrorString());
     cgiStartHTML(title);
     cgiCopyTemplateLang("error.tmpl");
@@ -788,7 +792,7 @@ cgiPrintTestPage(http_t     *http,	/* I - Connection to server */
   cgiStartHTML(cgiText(_("Print Test Page")));
 
   if (cupsLastError() > IPP_OK_CONFLICT)
-    cgiShowIPPError(_("Unable to print test page:"));
+    cgiShowIPPError(_("Unable to print test page"));
   else
   {
     cgiSetVariable("PRINTER_NAME", dest);
@@ -902,12 +906,12 @@ cgiRewriteURL(const char *uri,		/* I - Current URI */
     * Map local access to a local URI...
     */
 
-    if (!strcasecmp(hostname, "127.0.0.1") ||
-	!strcasecmp(hostname, "[::1]") ||
-	!strcasecmp(hostname, "localhost") ||
-	!strncasecmp(hostname, "localhost.", 10) ||
-	!strcasecmp(hostname, server) ||
-	!strcasecmp(hostname, servername))
+    if (!_cups_strcasecmp(hostname, "127.0.0.1") ||
+	!_cups_strcasecmp(hostname, "[::1]") ||
+	!_cups_strcasecmp(hostname, "localhost") ||
+	!_cups_strncasecmp(hostname, "localhost.", 10) ||
+	!_cups_strcasecmp(hostname, server) ||
+	!_cups_strcasecmp(hostname, servername))
     {
      /*
       * Make URI relative to the current server...
@@ -926,7 +930,7 @@ cgiRewriteURL(const char *uri,		/* I - Current URI */
 		 ishttps ? "https" : "http",
 		 userpass, hostname, port, resource);
       else
-	snprintf(url, urlsize, "%s://%s:%d%s", 
+	snprintf(url, urlsize, "%s://%s:%d%s",
 		 ishttps ? "https" : "http",
 		 hostname, port, resource);
     }
@@ -1215,7 +1219,7 @@ cgiSetIPPObjectVars(
 	             "%dx%d%s", attr->values[i].resolution.xres,
 		     attr->values[i].resolution.yres,
 		     attr->values[i].resolution.units == IPP_RES_PER_INCH ?
-			 "dpi" : "dpc");
+			 "dpi" : "dpcm");
 	    break;
 
 	case IPP_TAG_URI :
@@ -1343,7 +1347,7 @@ cgiSetIPPVars(ipp_t      *response,	/* I - Response data to be copied... */
 	     (filter->value_tag >= IPP_TAG_TEXTLANG &&
 	      filter->value_tag <= IPP_TAG_MIMETYPE)) &&
 	    filter->values[0].string.text != NULL &&
-	    !strcasecmp(filter->values[0].string.text, filter_value))
+	    !_cups_strcasecmp(filter->values[0].string.text, filter_value))
 	  break;
 
       if (!filter)
@@ -1428,7 +1432,7 @@ cgiShowJobs(http_t     *http,		/* I - Connection to server */
     ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_URI, "printer-uri", NULL,
         	 "ipp://localhost/");
 
-  if ((which_jobs = cgiGetVariable("which_jobs")) != NULL)
+  if ((which_jobs = cgiGetVariable("which_jobs")) != NULL && *which_jobs)
     ippAddString(request, IPP_TAG_OPERATION, IPP_TAG_KEYWORD, "which-jobs",
                  NULL, which_jobs);
 
@@ -1476,10 +1480,11 @@ cgiShowJobs(http_t     *http,		/* I - Connection to server */
     if (first < 0)
       first = 0;
 
-    if ((var = cgiGetVariable("ORDER")) != NULL)
-      ascending = !strcasecmp(var, "asc");
+    if ((var = cgiGetVariable("ORDER")) != NULL && *var)
+      ascending = !_cups_strcasecmp(var, "asc");
     else
-      ascending = !which_jobs || !strcasecmp(which_jobs, "not-completed");
+      ascending = !which_jobs || !*which_jobs ||
+                  !_cups_strcasecmp(which_jobs, "not-completed");
 
     section = cgiGetVariable("SECTION");
 
@@ -1518,7 +1523,11 @@ cgiShowJobs(http_t     *http,		/* I - Connection to server */
     */
 
     if (dest)
+    {
       snprintf(val, sizeof(val), "/%s/%s", section, dest);
+      cgiSetVariable("PRINTER_NAME", dest);
+      cgiSetVariable("PRINTER_URI_SUPPORTED", val);
+    }
     else
       strlcpy(val, "/jobs/", sizeof(val));
 
@@ -1580,5 +1589,5 @@ cgiText(const char *message)		/* I - Message */
 
 
 /*
- * End of "$Id: ipp-var.c 8859 2009-11-09 23:01:17Z mike $".
+ * End of "$Id: ipp-var.c 7940 2008-09-16 00:45:16Z mike $".
  */

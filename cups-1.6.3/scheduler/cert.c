@@ -1,10 +1,9 @@
 /*
- * "$Id: cert.c 8369 2009-02-18 23:35:58Z mike $"
+ * "$Id: cert.c 7673 2008-06-18 22:31:26Z mike $"
  *
- *   Authentication certificate routines for the Common UNIX
- *   Printing System (CUPS).
+ *   Authentication certificate routines for the CUPS scheduler.
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2012 by Apple Inc.
  *   Copyright 1997-2006 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -43,7 +42,7 @@
 void
 cupsdAddCert(int        pid,		/* I - Process ID */
              const char *username,	/* I - Username */
-             void       *ccache)	/* I - Kerberos credentials or NULL */
+             int        type)		/* I - AuthType for username */
 {
   int		i;			/* Looping var */
   cupsd_cert_t	*cert;			/* Current certificate */
@@ -67,11 +66,12 @@ cupsdAddCert(int        pid,		/* I - Process ID */
   * Fill in the certificate information...
   */
 
-  cert->pid = pid;
+  cert->pid  = pid;
+  cert->type = type;
   strlcpy(cert->username, username, sizeof(cert->username));
 
   for (i = 0; i < 32; i ++)
-    cert->certificate[i] = hex[random() & 15];
+    cert->certificate[i] = hex[CUPS_RAND() & 15];
 
  /*
   * Save the certificate to a file readable only by the User and Group
@@ -122,6 +122,8 @@ cupsdAddCert(int        pid,		/* I - Process ID */
       * groups can access it...
       */
 
+      int	j;			/* Looping var */
+
 #  ifdef HAVE_MBR_UID_TO_UUID
      /*
       * On MacOS X, ACLs use UUIDs instead of GIDs...
@@ -135,6 +137,13 @@ cupsdAddCert(int        pid,		/* I - Process ID */
         * Add each group ID to the ACL...
 	*/
 
+        for (j = 0; j < i; j ++)
+	  if (SystemGroupIDs[j] == SystemGroupIDs[i])
+            break;
+
+        if (j < i)
+          continue;			/* Skip duplicate groups */
+
         acl_create_entry(&acl, &entry);
 	acl_get_permset(entry, &permset);
 	acl_add_perm(permset, ACL_READ_DATA);
@@ -143,6 +152,7 @@ cupsdAddCert(int        pid,		/* I - Process ID */
 	acl_set_qualifier(entry, &group);
 	acl_set_permset(entry, permset);
       }
+
 #  else
      /*
       * POSIX ACLs need permissions for owner, group, other, and mask
@@ -185,6 +195,13 @@ cupsdAddCert(int        pid,		/* I - Process ID */
         * Add each group ID to the ACL...
 	*/
 
+        for (j = 0; j < i; j ++)
+	  if (SystemGroupIDs[j] == SystemGroupIDs[i])
+            break;
+
+        if (j < i)
+          continue;			/* Skip duplicate groups */
+
         acl_create_entry(&acl, &entry);
 	acl_get_permset(entry, &permset);
 	acl_add_perm(permset, ACL_READ);
@@ -197,7 +214,6 @@ cupsdAddCert(int        pid,		/* I - Process ID */
       {
         char *text, *textptr;		/* Temporary string */
 
-
         cupsdLogMessage(CUPSD_LOG_ERROR, "ACL did not validate: %s",
 	                strerror(errno));
         text = acl_to_text(acl, NULL);
@@ -207,7 +223,7 @@ cupsdAddCert(int        pid,		/* I - Process ID */
 	  *textptr = ',';
 
 	cupsdLogMessage(CUPSD_LOG_ERROR, "ACL: %s", text);
-	free(text);
+	acl_free(text);
       }
 #  endif /* HAVE_MBR_UID_TO_UUID */
 
@@ -243,16 +259,6 @@ cupsdAddCert(int        pid,		/* I - Process ID */
 
   write(fd, cert->certificate, strlen(cert->certificate));
   close(fd);
-
- /*
-  * Add Kerberos credentials as needed...
-  */
-
-#ifdef HAVE_GSSAPI
-  cert->ccache = (krb5_ccache)ccache;
-#else
-  (void)ccache;
-#endif /* HAVE_GSSAPI */
 
  /*
   * Insert the certificate at the front of the list...
@@ -292,15 +298,6 @@ cupsdDeleteCert(int pid)		/* I - Process ID */
         Certs = cert->next;
       else
         prev->next = cert->next;
-
-#ifdef HAVE_GSSAPI
-     /*
-      * Release Kerberos credentials as needed...
-      */
-
-      if (cert->ccache)
-	krb5_cc_destroy(KerberosContext, cert->ccache);
-#endif /* HAVE_GSSAPI */
 
       free(cert);
 
@@ -369,7 +366,7 @@ cupsdFindCert(const char *certificate)	/* I - Certificate */
   cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdFindCert(certificate=%s)",
                   certificate);
   for (cert = Certs; cert != NULL; cert = cert->next)
-    if (!strcasecmp(certificate, cert->certificate))
+    if (!_cups_strcasecmp(certificate, cert->certificate))
     {
       cupsdLogMessage(CUPSD_LOG_DEBUG2, "cupsdFindCert: Returning %s...",
                       cert->username);
@@ -390,9 +387,8 @@ cupsdFindCert(const char *certificate)	/* I - Certificate */
 void
 cupsdInitCerts(void)
 {
+#ifndef HAVE_ARC4RANDOM
   cups_file_t	*fp;			/* /dev/random file */
-  unsigned	seed;			/* Seed for random number generator */
-  struct timeval tod;			/* Time of day */
 
 
  /*
@@ -402,16 +398,20 @@ cupsdInitCerts(void)
 
   if ((fp = cupsFileOpen("/dev/urandom", "rb")) == NULL)
   {
+    struct timeval tod;			/* Time of day */
+
    /*
     * Get the time in usecs and use it as the initial seed...
     */
 
     gettimeofday(&tod, NULL);
 
-    seed = (unsigned)(tod.tv_sec + tod.tv_usec);
+    CUPS_SRAND((unsigned)(tod.tv_sec + tod.tv_usec));
   }
   else
   {
+    unsigned	seed;			/* Seed for random number generator */
+
    /*
     * Read 4 random characters from the random device and use
     * them as the seed...
@@ -420,22 +420,21 @@ cupsdInitCerts(void)
     seed = cupsFileGetChar(fp);
     seed = (seed << 8) | cupsFileGetChar(fp);
     seed = (seed << 8) | cupsFileGetChar(fp);
-    seed = (seed << 8) | cupsFileGetChar(fp);
+    CUPS_SRAND((seed << 8) | cupsFileGetChar(fp));
 
     cupsFileClose(fp);
   }
-
-  srandom(seed);
+#endif /* !HAVE_ARC4RANDOM */
 
  /*
   * Create a root certificate and return...
   */
 
   if (!RunUser)
-    cupsdAddCert(0, "root", NULL);
+    cupsdAddCert(0, "root", cupsdDefaultAuthType());
 }
 
 
 /*
- * End of "$Id: cert.c 8369 2009-02-18 23:35:58Z mike $".
+ * End of "$Id: cert.c 7673 2008-06-18 22:31:26Z mike $".
  */

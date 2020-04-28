@@ -1,9 +1,9 @@
 /*
- * "$Id: getputfile.c 8585 2009-04-30 22:15:05Z mike $"
+ * "$Id: getputfile.c 7359 2008-02-29 19:01:35Z mike $"
  *
- *   Get/put file functions for the Common UNIX Printing System (CUPS).
+ *   Get/put file functions for CUPS.
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2012 by Apple Inc.
  *   Copyright 1997-2006 by Easy Software Products.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -26,13 +26,7 @@
  * Include necessary headers...
  */
 
-#include "globals.h"
-#include "cups.h"
-#include "language.h"
-#include "debug.h"
-#include <stdlib.h>
-#include <ctype.h>
-#include <errno.h>
+#include "cups-private.h"
 #include <fcntl.h>
 #include <sys/stat.h>
 #if defined(WIN32) || defined(__EMX__)
@@ -47,7 +41,7 @@
  *
  * This function returns @code HTTP_OK@ when the file is successfully retrieved.
  *
- * @since CUPS 1.1.20/Mac OS X 10.4@
+ * @since CUPS 1.1.20/OS X 10.4@
  */
 
 http_status_t				/* O - HTTP status */
@@ -193,7 +187,7 @@ cupsGetFd(http_t     *http,		/* I - Connection to server or @code CUPS_HTTP_DEFA
  *
  * This function returns @code HTTP_OK@ when the file is successfully retrieved.
  *
- * @since CUPS 1.1.20/Mac OS X 10.4@
+ * @since CUPS 1.1.20/OS X 10.4@
  */
 
 http_status_t				/* O - HTTP status */
@@ -261,7 +255,7 @@ cupsGetFile(http_t     *http,		/* I - Connection to server or @code CUPS_HTTP_DE
  * This function returns @code HTTP_CREATED@ when the file is stored
  * successfully.
  *
- * @since CUPS 1.1.20/Mac OS X 10.4@
+ * @since CUPS 1.1.20/OS X 10.4@
  */
 
 http_status_t				/* O - HTTP status */
@@ -452,7 +446,7 @@ cupsPutFd(http_t     *http,		/* I - Connection to server or @code CUPS_HTTP_DEFA
  * This function returns @code HTTP_CREATED@ when the file is stored
  * successfully.
  *
- * @since CUPS 1.1.20/Mac OS X 10.4@
+ * @since CUPS 1.1.20/OS X 10.4@
  */
 
 http_status_t				/* O - HTTP status */
@@ -504,5 +498,5 @@ cupsPutFile(http_t     *http,		/* I - Connection to server or @code CUPS_HTTP_DE
 
 
 /*
- * End of "$Id: getputfile.c 8585 2009-04-30 22:15:05Z mike $".
+ * End of "$Id: getputfile.c 7359 2008-02-29 19:01:35Z mike $".
  */

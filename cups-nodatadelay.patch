@@ -1,7 +1,7 @@
-diff -up cups-1.4.2/scheduler/client.c.nodatadelay cups-1.4.2/scheduler/client.c
---- cups-1.4.2/scheduler/client.c.nodatadelay	2014-06-16 15:44:52.043739500 +0100
-+++ cups-1.4.2/scheduler/client.c	2014-06-16 15:46:22.825193077 +0100
-@@ -2104,7 +2104,9 @@ cupsdReadClient(cupsd_client_t *con)	/*
+diff -up cups-1.6.3/scheduler/client.c.nodatadelay cups-1.6.3/scheduler/client.c
+--- cups-1.6.3/scheduler/client.c.nodatadelay	2014-09-02 10:50:07.714003098 +0100
++++ cups-1.6.3/scheduler/client.c	2014-09-02 10:50:30.960118311 +0100
+@@ -2138,7 +2138,9 @@ cupsdReadClient(cupsd_client_t *con)	/*
  
  	  if (con->http.state != HTTP_POST_SEND)
  	  {

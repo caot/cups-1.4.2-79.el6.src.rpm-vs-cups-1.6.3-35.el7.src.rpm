@@ -1,10 +1,9 @@
 /*
- * "$Id: http.h 8724 2009-06-22 20:40:28Z mike $"
+ * "$Id: http.h 7026 2007-10-19 00:57:45Z mike $"
  *
- *   Hyper-Text Transport Protocol definitions for the Common UNIX Printing
- *   System (CUPS).
+ *   Hyper-Text Transport Protocol definitions for CUPS.
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2012 by Apple Inc.
  *   Copyright 1997-2007 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -24,6 +23,7 @@
  */
 
 #  include "versioning.h"
+#  include "array.h"
 #  include <string.h>
 #  include <time.h>
 #  include <sys/types.h>
@@ -88,7 +88,7 @@ extern "C" {
 #if defined(AF_INET6) && !defined(s6_addr32)
 #  if defined(__sun)
 #    define s6_addr32	_S6_un._S6_u32
-#  elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__APPLE__)
+#  elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__APPLE__)|| defined(__DragonFly__)
 #    define s6_addr32	__u6_addr.__u6_addr32
 #  elif defined(__osf__)
 #    define s6_addr32	s6_un.sa6_laddr
@@ -124,7 +124,7 @@ typedef enum http_auth_e		/**** HTTP authentication types ****/
   HTTP_AUTH_MD5_SESS,			/* MD5-session authentication in use */
   HTTP_AUTH_MD5_INT,			/* Digest authentication in use for body */
   HTTP_AUTH_MD5_SESS_INT,		/* MD5-session authentication in use for body */
-  HTTP_AUTH_NEGOTIATE			/* GSSAPI authentication in use @since CUPS 1.3/Mac OS X 10.5@ */
+  HTTP_AUTH_NEGOTIATE			/* GSSAPI authentication in use @since CUPS 1.3/OS X 10.5@ */
 } http_auth_t;
 
 typedef enum http_encoding_e		/**** HTTP transfer encoding values ****/
@@ -250,11 +250,12 @@ typedef enum http_status_e		/**** HTTP status codes ****/
   HTTP_GATEWAY_TIMEOUT,			/* Gateway connection timed out */
   HTTP_NOT_SUPPORTED,			/* HTTP version not supported */
 
-  HTTP_AUTHORIZATION_CANCELED = 1000	/* User cancelled authorization */
-
+  HTTP_AUTHORIZATION_CANCELED = 1000,	/* User canceled authorization @since CUPS 1.4@ */
+  HTTP_PKI_ERROR,			/* Error negotiating a secure connection @since CUPS 1.5/OS X 10.7@ */
+  HTTP_WEBIF_DISABLED			/* Web interface is disabled @private@ */
 } http_status_t;
 
-typedef enum http_uri_status_e		/**** URI separation status @since CUPS1.2@ ****/
+typedef enum http_uri_status_e		/**** URI separation status @since CUPS 1.2@ ****/
 {
   HTTP_URI_OVERFLOW = -8,		/* URI buffer for httpAssembleURI is too small */
   HTTP_URI_BAD_ARGUMENTS = -7,		/* Bad arguments to function (error) */
@@ -278,7 +279,8 @@ typedef enum http_uri_coding_e		/**** URI en/decode flags ****/
   HTTP_URI_CODING_RESOURCE = 4,		/* En/decode the resource portion */
   HTTP_URI_CODING_MOST = 7,		/* En/decode all but the query */
   HTTP_URI_CODING_QUERY = 8,		/* En/decode the query portion */
-  HTTP_URI_CODING_ALL = 15		/* En/decode everything */
+  HTTP_URI_CODING_ALL = 15,		/* En/decode everything */
+  HTTP_URI_CODING_RFC6874 = 16		/* Use RFC 6874 address format */
 } http_uri_coding_t;
 
 typedef enum http_version_e		/**** HTTP version numbers ****/
@@ -291,7 +293,7 @@ typedef enum http_version_e		/**** HTTP version numbers ****/
 typedef union _http_addr_u		/**** Socket address union, which
 					 **** makes using IPv6 and other
 					 **** address types easier and
-					 **** more portable. @since CUPS 1.2/Mac OS X 10.5@
+					 **** more portable. @since CUPS 1.2/OS X 10.5@
 					 ****/
 {
   struct sockaddr	addr;		/* Base structure for family value */
@@ -308,7 +310,7 @@ typedef union _http_addr_u		/**** Socket address union, which
 typedef struct http_addrlist_s		/**** Socket address list, which is
 					 **** used to enumerate all of the
 					 **** addresses that are associated
-					 **** with a hostname. @since CUPS 1.2/Mac OS X 10.5@
+					 **** with a hostname. @since CUPS 1.2/OS X 10.5@
 					 ****/
 {
   struct http_addrlist_s *next;		/* Pointer to next address in list */
@@ -316,6 +318,16 @@ typedef struct http_addrlist_s		/**** Socket address list, which is
 } http_addrlist_t;
 
 typedef struct _http_s http_t;		/**** HTTP connection type ****/
+
+typedef struct http_credential_s	/**** HTTP credential data @since CUPS 1.5/OS X 10.7@ ****/
+{
+  void		*data;			/* Pointer to credential data */
+  size_t	datalen;		/* Credential length */
+} http_credential_t;
+
+typedef int (*http_timeout_cb_t)(http_t *http, void *user_data);
+					/**** HTTP timeout callback @since CUPS 1.5/OS X 10.7@ ****/
+
 
 
 /*
@@ -346,10 +358,7 @@ extern void		httpInitialize(void);
 extern int		httpOptions(http_t *http, const char *uri);
 extern int		httpPost(http_t *http, const char *uri);
 extern int		httpPrintf(http_t *http, const char *format, ...)
-#  ifdef __GNUC__
-__attribute__ ((__format__ (__printf__, 2, 3)))
-#  endif /* __GNUC__ */
-;
+			__attribute__ ((__format__ (__printf__, 2, 3)));
 extern int		httpPut(http_t *http, const char *uri);
 extern int		httpRead(http_t *http, char *buffer, int length) _CUPS_DEPRECATED;
 extern int		httpReconnect(http_t *http);
@@ -387,7 +396,7 @@ extern void		httpSeparate2(const char *uri,
 				      char *host, int hostlen, int *port,
 				      char *resource, int resourcelen) _CUPS_DEPRECATED;
 
-/**** New in CUPS 1.2/Mac OS X 10.5 ****/
+/**** New in CUPS 1.2/OS X 10.5 ****/
 extern int		httpAddrAny(const http_addr_t *addr) _CUPS_API_1_2;
 extern http_addrlist_t	*httpAddrConnect(http_addrlist_t *addrlist, int *sock) _CUPS_API_1_2;
 extern int		httpAddrEqual(const http_addr_t *addr1,
@@ -435,10 +444,34 @@ extern void		httpSetLength(http_t *http, size_t length) _CUPS_API_1_2;
 extern ssize_t		httpWrite2(http_t *http, const char *buffer,
 			           size_t length) _CUPS_API_1_2;
 
-/**** New in CUPS 1.3/Mac OS X 10.5 ****/
+/**** New in CUPS 1.3/OS X 10.5 ****/
 extern char		*httpGetAuthString(http_t *http) _CUPS_API_1_3;
 extern void		httpSetAuthString(http_t *http, const char *scheme,
 			                  const char *data) _CUPS_API_1_3;
+
+/**** New in CUPS 1.5/OS X 10.7 ****/
+extern int		httpAddCredential(cups_array_t *credentials,
+			                  const void *data, size_t datalen)
+					  _CUPS_API_1_5;
+extern int		httpCopyCredentials(http_t *http,
+					    cups_array_t **credentials)
+					    _CUPS_API_1_5;
+extern void		httpFreeCredentials(cups_array_t *certs) _CUPS_API_1_5;
+extern int		httpSetCredentials(http_t *http, cups_array_t *certs)
+					   _CUPS_API_1_5;
+extern void		httpSetTimeout(http_t *http, double timeout,
+			               http_timeout_cb_t cb, void *user_data)
+			               _CUPS_API_1_5;
+
+/**** New in CUPS 1.6/OS X 10.8 ****/
+extern http_addrlist_t	*httpAddrConnect2(http_addrlist_t *addrlist, int *sock,
+			                  int msec, int *cancel)
+			                  _CUPS_API_1_6;
+extern http_state_t	httpGetState(http_t *http) _CUPS_API_1_6;
+extern http_version_t	httpGetVersion(http_t *http) _CUPS_API_1_6;
+extern int		httpReconnect2(http_t *http, int msec, int *cancel)
+			               _CUPS_API_1_6;
+
 
 /*
  * C++ magic...
@@ -450,5 +483,5 @@ extern void		httpSetAuthString(http_t *http, const char *scheme,
 #endif /* !_CUPS_HTTP_H_ */
 
 /*
- * End of "$Id: http.h 8724 2009-06-22 20:40:28Z mike $".
+ * End of "$Id: http.h 7026 2007-10-19 00:57:45Z mike $".
  */

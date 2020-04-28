@@ -1,9 +1,9 @@
 /*
- * "$Id: testbackend.c 8689 2009-05-27 18:32:43Z mike $"
+ * "$Id: testbackend.c 3755 2012-03-30 05:59:14Z msweet $"
  *
- *   Backend test program for the Common UNIX Printing System (CUPS).
+ *   Backend test program for CUPS.
  *
- *   Copyright 2007-2009 by Apple Inc.
+ *   Copyright 2007-2012 by Apple Inc.
  *   Copyright 1997-2005 by Easy Software Products, all rights reserved.
  *
  *   These coded instructions, statements, and computer programs are the
@@ -26,14 +26,11 @@
  * Include necessary headers.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <cups/string.h>
+#include <cups/string-private.h>
 #include <cups/cups.h>
 #include <cups/sidechannel.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <errno.h>
 #include <sys/wait.h>
 #include <signal.h>
 
@@ -50,7 +47,7 @@ static int	job_canceled = 0;
  */
 
 static void	sigterm_handler(int sig);
-static void	usage(void);
+static void	usage(void) __attribute__((noreturn));
 static void	walk_cb(const char *oid, const char *data, int datalen,
 		        void *context);
 
@@ -60,7 +57,7 @@ static void	walk_cb(const char *oid, const char *data, int datalen,
  *
  * Usage:
  *
- *    betest [-s] [-t] device-uri job-id user title copies options [file]
+ *    testbackend [-s] [-t] device-uri job-id user title copies options [file]
  */
 
 int					/* O - Exit status */
@@ -78,7 +75,9 @@ main(int  argc,				/* I - Number of command-line args */
   const char	*oid = ".1.3.6.1.2.1.43.10.2.1.4.1.1";
   					/* OID to lookup or walk */
   char		scheme[255],		/* Scheme in URI == backend */
-		backend[1024];		/* Backend path */
+		backend[1024],		/* Backend path */
+		libpath[1024],		/* Path for libcups */
+		*ptr;			/* Pointer into path */
   const char	*serverbin;		/* CUPS_SERVERBIN environment variable */
   int		fd,			/* Temporary file descriptor */
 		back_fds[2],		/* Back-channel pipe */
@@ -89,6 +88,29 @@ main(int  argc,				/* I - Number of command-line args */
 		pid,			/* Process ID */
 		status;			/* Exit status */
 
+
+ /*
+  * Get the current directory and point the run-time linker at the "cups"
+  * subdirectory...
+  */
+
+  if (getcwd(libpath, sizeof(libpath)) &&
+      (ptr = strrchr(libpath, '/')) != NULL && !strcmp(ptr, "/backend"))
+  {
+    strlcpy(ptr, "/cups", sizeof(libpath) - (ptr - libpath));
+    if (!access(libpath, 0))
+    {
+#ifdef __APPLE__
+      fprintf(stderr, "Setting DYLD_LIBRARY_PATH to \"%s\".\n", libpath);
+      setenv("DYLD_LIBRARY_PATH", libpath, 1);
+#else
+      fprintf(stderr, "Setting LD_LIBRARY_PATH to \"%s\".\n", libpath);
+      setenv("LD_LIBRARY_PATH", libpath, 1);
+#endif /* __APPLE__ */
+    }
+    else
+      perror(libpath);
+  }
 
  /*
   * See if we have side-channel tests to do...
@@ -551,13 +573,13 @@ main(int  argc,				/* I - Number of command-line args */
 
       length   = sizeof(buffer);
       scstatus = cupsSideChannelSNMPGet(oid, buffer, &length, 5.0);
-      printf("CUPS_SC_CMD_SNMP_GET %s returned %s, %s\n", oid,
-	     statuses[scstatus], buffer);
+      printf("CUPS_SC_CMD_SNMP_GET %s returned %s, %d bytes (%s)\n", oid,
+	     statuses[scstatus], (int)length, buffer);
 
       length   = sizeof(buffer);
       scstatus = cupsSideChannelSNMPGet(oid, buffer, &length, 5.0);
-      printf("CUPS_SC_CMD_SNMP_GET %s returned %s, %s\n", oid,
-	     statuses[scstatus], buffer);
+      printf("CUPS_SC_CMD_SNMP_GET %s returned %s, %d bytes (%s)\n", oid,
+	     statuses[scstatus], (int)length, buffer);
     }
 
     length   = 0;
@@ -572,7 +594,7 @@ main(int  argc,				/* I - Number of command-line args */
     kill(data_pid, SIGTERM);
     kill(back_pid, SIGTERM);
   }
-  
+
   while ((pid = wait(&status)) > 0)
   {
     if (status)
@@ -616,13 +638,13 @@ sigterm_handler(int sig)		/* I - Signal */
 static void
 usage(void)
 {
-  puts("Usage: testbackend [-cancel] [-d] [-ps | -pcl] [-s [-oid OID] "
+  puts("Usage: testbackend [-cancel] [-d] [-ps | -pcl] [-s [-get OID] "
        "[-walk OID]] [-t] device-uri job-id user title copies options [file]");
   puts("");
   puts("Options:");
   puts("  -cancel     Simulate a canceled print job after 2 seconds.");
   puts("  -d          Show log messages from backend.");
-  puts("  -oid OID    Lookup the specified SNMP OID.");
+  puts("  -get OID    Lookup the specified SNMP OID.");
   puts("              (.1.3.6.1.2.1.43.10.2.1.4.1.1 is a good one for printers)");
   puts("  -pcl        Send PCL+PJL query and test page to backend.");
   puts("  -ps         Send PostScript query and test page to backend.");
@@ -645,10 +667,10 @@ walk_cb(const char *oid,		/* I - OID */
 	int        datalen,		/* I - Length of data */
 	void       *context)		/* I - Context (unused) */
 {
-  printf("CUPS_SC_CMD_SNMP_WALK %s=%s (%d bytes)\n", oid, data, datalen);
+  printf("CUPS_SC_CMD_SNMP_WALK %s, %d bytes (%s)\n", oid, datalen, data);
 }
 
 
 /*
- * End of "$Id: testbackend.c 8689 2009-05-27 18:32:43Z mike $".
+ * End of "$Id: testbackend.c 3755 2012-03-30 05:59:14Z msweet $".
  */

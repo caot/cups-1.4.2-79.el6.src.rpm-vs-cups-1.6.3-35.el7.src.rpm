@@ -1,9 +1,9 @@
 #
-# "$Id: Makefile 8627 2009-05-13 21:39:17Z mike $"
+# "$Id: Makefile 7930 2008-09-10 22:25:54Z mike $"
 #
-#   Man page makefile for the Common UNIX Printing System (CUPS).
+#   Man page makefile for CUPS.
 #
-#   Copyright 2007-2008 by Apple Inc.
+#   Copyright 2007-2012 by Apple Inc.
 #   Copyright 1993-2006 by Easy Software Products.
 #
 #   These coded instructions, statements, and computer programs are the
@@ -24,6 +24,7 @@ MAN1	=	cancel.$(MAN1EXT) \
 		cups-config.$(MAN1EXT) \
 		cupstestdsc.$(MAN1EXT) \
 		cupstestppd.$(MAN1EXT) \
+		ipptool.$(MAN1EXT) \
 		lp.$(MAN1EXT) \
 		lpoptions.$(MAN1EXT) \
 		lppasswd.$(MAN1EXT) \
@@ -38,8 +39,10 @@ MAN1	=	cancel.$(MAN1EXT) \
 		ppdpo.$(MAN1EXT)
 MAN5	=	classes.conf.$(MAN5EXT) \
 		client.conf.$(MAN5EXT) \
+		cups-files.conf.$(MAN5EXT) \
 		cups-snmp.conf.$(MAN5EXT) \
 		cupsd.conf.$(MAN5EXT) \
+		ipptoolfile.$(MAN5EXT) \
 		mailto.conf.$(MAN5EXT) \
 		mime.convs.$(MAN5EXT) \
 		mime.types.$(MAN5EXT) \
@@ -47,7 +50,6 @@ MAN5	=	classes.conf.$(MAN5EXT) \
 		printers.conf.$(MAN5EXT) \
 		subscriptions.conf.$(MAN5EXT)
 MAN7	=	backend.$(MAN7EXT) \
-		drv.$(MAN7EXT) \
 		filter.$(MAN7EXT) \
 		notifier.$(MAN7EXT)
 MAN8	=	cupsaccept.$(MAN8EXT) \
@@ -57,7 +59,7 @@ MAN8	=	cupsaccept.$(MAN8EXT) \
 		cups-deviced.$(MAN8EXT) \
 		cups-driverd.$(MAN8EXT) \
 		cups-lpd.$(MAN8EXT) \
-		cups-polld.$(MAN8EXT) \
+		cups-snmp.$(MAN8EXT) \
 		cupsd.$(MAN8EXT) \
 		cupsenable.$(MAN8EXT) \
 		lpadmin.$(MAN8EXT) \
@@ -95,10 +97,14 @@ clean:
 	$(RM) mantohtml mantohtml.o
 	$(RM) $(MAN1) $(MAN5) $(MAN7) $(MAN8)
 	for file in $(MAN1); do \
-		$(RM) ../doc/help/man-`basename $$file .$(MAN1EXT)`.html; \
+		if test $$file != ipptool.$(MAN1EXT); then \
+			$(RM) ../doc/help/man-`basename $$file .$(MAN1EXT)`.html; \
+		fi \
 	done
 	for file in $(MAN5); do \
-		$(RM) ../doc/help/man-`basename $$file .$(MAN5EXT)`.html; \
+		if test $$file != ipptoolfile.$(MAN5EXT); then \
+			$(RM) ../doc/help/man-`basename $$file .$(MAN5EXT)`.html; \
+		fi \
 	done
 	for file in $(MAN7); do \
 		$(RM) ../doc/help/man-`basename $$file .$(MAN7EXT)`.html; \
@@ -231,5 +237,5 @@ mantohtml:	mantohtml.o
 
 
 #
-# End of "$Id: Makefile 8627 2009-05-13 21:39:17Z mike $".
+# End of "$Id: Makefile 7930 2008-09-10 22:25:54Z mike $".
 #
